@@ -1,0 +1,3 @@
+Es una demo de un CRUD hecho con Python
+
+Antes de abrir la app, hay que instalar python en el PC...
