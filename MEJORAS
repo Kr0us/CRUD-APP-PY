@@ -9,7 +9,7 @@ conn = sqlite3.connect('F:\\SQLITE DB\\Casa_de_la_impresion\\empresa.db')
 c = conn.cursor()
 
 # Ruta del archivo de usuarios
-USUARIOS_FILE = 'usuarios.txt'
+USUARIOS_FILE = 'SQL_PY\\usuarios.txt'
 
 # Función para leer usuarios desde el archivo de texto
 def leer_usuarios():
@@ -151,7 +151,7 @@ def main_window(tabla):
         read_clientes()
         
         # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=9, column=0, columnspan=4)
+        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
 
     elif tabla == 'Pedidos':
     # Configuración de la interfaz para Pedidos
@@ -229,7 +229,7 @@ def main_window(tabla):
         read_fabricacion()
 
         # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=7, column=0, columnspan=4)
+        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
 
     elif tabla == 'PedidoSantiago':
         # Configuración de la interfaz para PedidoSantiago
@@ -254,7 +254,7 @@ def main_window(tabla):
         read_pedido_santiago()
 
         # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=4, column=0, columnspan=4)
+        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
     
     elif tabla == 'PedidoStarken':
         # Configuración de la interfaz para PedidoStarken
@@ -279,7 +279,7 @@ def main_window(tabla):
         read_pedido_starken()
 
         # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=4, column=0, columnspan=4)
+        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
 
     root.mainloop()
 
@@ -644,7 +644,6 @@ def tabla_seleccion_window():
     tk.Button(tabla_seleccion, text="Fabricación", command=lambda: [tabla_seleccion.destroy(), main_window('Fabricación')]).pack(pady=10)
     tk.Button(tabla_seleccion, text="PedidoSantiago", command=lambda: [tabla_seleccion.destroy(), main_window('PedidoSantiago')]).pack(pady=10)
     tk.Button(tabla_seleccion, text="PedidoStarken", command=lambda: [tabla_seleccion.destroy(), main_window('PedidoStarken')]).pack(pady=10)
-
     tk.Button(tabla_seleccion, text="Consultar", command=lambda: [tabla_seleccion.destroy(), consulta_tabla_simplificada()]).pack(pady=10)
 
     tabla_seleccion.mainloop()
@@ -665,7 +664,7 @@ def consulta_tabla_window():
     tree = ttk.Treeview(consulta_window)
     tree.grid(row=1, column=0, columnspan=3)
 
-    tk.Button(consulta_window, text="Volver", command=lambda: [consulta_window.destroy(), tabla_seleccion_window()]).grid(row=2, column=0, columnspan=3)
+    tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
 
 def ejecutar_consulta():
     query = entry_query.get()
@@ -728,6 +727,8 @@ def open_recovery_window():
 
     tk.Button(recovery_window, text="Restablecer Contraseña", command=recuperar_contraseña).grid(row=3, column=0, columnspan=2)
 
+    tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
+
 # Ventana de inicio de sesión
 login_window = tk.Tk()
 login_window.title("Inicio de Sesión")
@@ -744,5 +745,7 @@ tk.Button(login_window, text="Iniciar Sesión", command=autenticar_usuario).grid
 tk.Button(login_window, text="Registrar", command=open_register_window).grid(row=3, column=0, columnspan=2)
 tk.Button(login_window, text="Recuperar Contraseña", command=open_recovery_window).grid(row=4, column=0, columnspan=2)
 
+
 login_window.mainloop()
 conn.close()
+
