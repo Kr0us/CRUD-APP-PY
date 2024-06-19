@@ -1,11 +1,11 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
-import os
+from tkinter import ttk, messagebox
 import sqlite3
-import re
+import os
 
 # Conexión a la base de datos SQLite
-conn = sqlite3.connect('F:\\SQLITE DB\\Casa_de_la_impresion\\empresa.db')
+db_path = 'C:\\Users\\Krous\\Desktop\\PRUEBAS DE CRUD\\empresa.db'
+conn = sqlite3.connect(db_path)
 c = conn.cursor()
 
 # Ruta del archivo de usuarios
@@ -22,50 +22,6 @@ def leer_usuarios():
                 usuarios[rut] = password
     return usuarios
 
-#Codigo aniadir Validacion
-def validar_rut(rut):
-    return re.match(r'^\d{7,8}-[kK\d]$', rut) is not None
-
-def validar_email(email):
-    return re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email) is not None
-
-def validar_telefono(telefono):
-    return re.match(r'^\d{9,15}$', telefono) is not None
-
-def validar_campos_cliente(nombre, apellido, rut, direccion, comuna, telefono, correo):
-    if not nombre or not apellido or not rut or not direccion or not comuna or not telefono or not correo:
-        return False, "Por favor, complete todos los campos"
-    if not validar_rut(rut):
-        return False, "RUT no válido. Debe ser de la forma 12345678-9"
-    if not validar_email(correo):
-        return False, "Correo electrónico no válido"
-    if not validar_telefono(telefono):
-        return False, "Número de teléfono no válido. Debe contener entre 9 y 15 dígitos"
-    return True, ""
-
-# Función para registrar un nuevo usuario
-def registrar_usuario():
-    rut = entry_rut_register.get()
-    password = entry_password_register.get()
-    confirm_password = entry_confirm_password_register.get()
-    if not validar_rut(rut):
-        messagebox.showerror("Error", "RUT no válido. Debe ser de la forma 12345678-9")
-        return
-    if rut and password and confirm_password:
-        if password != confirm_password:
-            messagebox.showerror("Error", "Las contraseñas no coinciden")
-            return
-        usuarios = leer_usuarios()
-        if rut in usuarios:
-            messagebox.showerror("Error", "El RUT ya está registrado")
-        else:
-            with open(USUARIOS_FILE, 'a') as file:
-                file.write(f"{rut},{password}\n")
-            messagebox.showinfo("Success", "Usuario registrado exitosamente")
-            register_window.destroy()
-    else:
-        messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-
 # Función para autenticar un usuario
 def autenticar_usuario():
     rut = entry_rut_login.get()
@@ -73,661 +29,140 @@ def autenticar_usuario():
     usuarios = leer_usuarios()
     if rut in usuarios and usuarios[rut] == password:
         login_window.destroy()
-        tabla_seleccion_window()
+        main_window()
     else:
         messagebox.showerror("Error de inicio de sesión", "RUT o contraseña incorrectos")
 
-# Función para recuperar contraseña
-def recuperar_contraseña():
-    rut = entry_rut_recovery.get()
-    new_password = entry_new_password_recovery.get()
-    confirm_new_password = entry_confirm_new_password_recovery.get()
-    if rut and new_password and confirm_new_password:
-        if new_password != confirm_new_password:
-            messagebox.showerror("Error", "Las contraseñas no coinciden")
-            return
-        usuarios = leer_usuarios()
-        if rut in usuarios:
-            usuarios[rut] = new_password
-            with open(USUARIOS_FILE, 'w') as file:
-                for rut, password in usuarios.items():
-                    file.write(f"{rut},{password}\n")
-            messagebox.showinfo("Success", "Contraseña actualizada exitosamente")
-            recovery_window.destroy()
-        else:
-            messagebox.showerror("Error", "RUT no registrado")
+# Función para cargar la tabla seleccionada
+def load_table(tabla):
+    global columns, form_entries
+    for widget in form_frame.winfo_children():
+        widget.destroy()
+    
+    if tabla == 'Cliente':
+        columns = ("ID_Cliente", "Nombre", "Apellido", "RUT", "Dirección", "Comuna", "Teléfono", "Correo")
+    elif tabla == 'pedidos':
+        columns = ("ID_Pedido", "Total", "Pago", "Tipo_Despacho", "Especificación", "Fecha", "RUT")
+    elif tabla == 'fabricacion':
+        columns = ("ID_Fabricacion", "Detalles", "Estado1", "Estado2", "Cantidad", "ID_Pedido")
+    elif tabla == 'PedidoSantiago':
+        columns = ("ID_PedidoSantiago", "Estado", "ID_Pedido")
+    elif tabla == 'PedidoStarken':
+        columns = ("ID_PedidoStarken", "Estado", "ID_Pedido")
+    
+    tree["columns"] = columns
+    for col in columns:
+        tree.heading(col, text=col)
+    
+    form_entries = {}
+    for i, col in enumerate(columns):
+        tk.Label(form_frame, text=col).grid(row=i, column=0)
+        entry = tk.Entry(form_frame)
+        entry.grid(row=i, column=1)
+        form_entries[col] = entry
+    
+    read_records()
+
+# Función para insertar registros en la tabla seleccionada
+def insert_record():
+    tabla = combo_tablas.get()
+    values = [entry.get() for entry in form_entries.values()]
+    
+    if all(values):
+        placeholders = ", ".join("?" for _ in values)
+        columns_str = ", ".join(columns[1:])
+        query = f"INSERT INTO {tabla} ({columns_str}) VALUES ({placeholders})"
+        c.execute(query, values[1:])
+        conn.commit()
+        messagebox.showinfo("Success", f"Registro insertado exitosamente en {tabla}")
+        clear_entries()
+        read_records()
     else:
         messagebox.showwarning("Input error", "Por favor, complete todos los campos")
 
-# Ventana principal de la aplicación CRUD
-def main_window(tabla):
-    global entry_total, entry_pago, entry_tipo_despacho, entry_especificacion, entry_fecha, entry_rut
-    global entry_detalles, entry_estado1, entry_estado2, entry_cantidad, entry_id_pedido
-    global entry_estado, records_list
-
-    root = tk.Tk()
-    root.title(f"CRUD App - {tabla}")
-
-    if tabla == 'Cliente':
-        # Configuración de la interfaz para Cliente
-        tk.Label(root, text="Nombre").grid(row=0, column=0)
-        entry_nombre = tk.Entry(root)
-        entry_nombre.grid(row=0, column=1)
-
-        tk.Label(root, text="Apellido").grid(row=1, column=0)
-        entry_apellido = tk.Entry(root)
-        entry_apellido.grid(row=1, column=1)
-
-        tk.Label(root, text="RUT").grid(row=2, column=0)
-        entry_rut = tk.Entry(root)
-        entry_rut.grid(row=2, column=1)
-
-        tk.Label(root, text="Dirección").grid(row=3, column=0)
-        entry_direccion = tk.Entry(root)
-        entry_direccion.grid(row=3, column=1)
-
-        tk.Label(root, text="Comuna").grid(row=4, column=0)
-        entry_comuna = tk.Entry(root)
-        entry_comuna.grid(row=4, column=1)
-
-        tk.Label(root, text="Teléfono").grid(row=5, column=0)
-        entry_telefono = tk.Entry(root)
-        entry_telefono.grid(row=5, column=1)
-
-        tk.Label(root, text="Correo").grid(row=6, column=0)
-        entry_correo = tk.Entry(root)
-        entry_correo.grid(row=6, column=1)
-
-        # Botones CRUD
-        tk.Button(root, text="Crear", command=create_cliente).grid(row=7, column=0)
-        tk.Button(root, text="Leer", command=read_clientes).grid(row=7, column=1)
-        tk.Button(root, text="Actualizar", command=update_cliente).grid(row=7, column=2)
-        tk.Button(root, text="Eliminar", command=delete_cliente).grid(row=7, column=3)
-
-        # Lista de registros
-        records_list = tk.Listbox(root, width=100)
-        records_list.grid(row=8, column=0, columnspan=4)
-
-        read_clientes()
-        
-        # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
-
-    elif tabla == 'Pedidos':
-    # Configuración de la interfaz para Pedidos
-        tk.Label(root, text="Total").grid(row=0, column=0)
-        entry_total = tk.Entry(root)
-        entry_total.grid(row=0, column=1)
-
-        tk.Label(root, text="Pago").grid(row=1, column=0)
-        entry_pago = tk.Entry(root)
-        entry_pago.grid(row=1, column=1)
-
-        tk.Label(root, text="Tipo Despacho").grid(row=2, column=0)
-        entry_tipo_despacho = tk.Entry(root)
-        entry_tipo_despacho.grid(row=2, column=1)
-
-        tk.Label(root, text="Especificación").grid(row=3, column=0)
-        entry_especificacion = tk.Entry(root)
-        entry_especificacion.grid(row=3, column=1)
-
-        tk.Label(root, text="Fecha").grid(row=4, column=0)
-        entry_fecha = tk.Entry(root)
-        entry_fecha.grid(row=4, column=1)
-
-        tk.Label(root, text="RUT").grid(row=5, column=0)
-        entry_rut = tk.Entry(root)
-        entry_rut.grid(row=5, column=1)
-
-        # Botones CRUD
-        tk.Button(root, text="Crear", command=create_pedido).grid(row=6, column=0)
-        tk.Button(root, text="Leer", command=read_pedidos).grid(row=6, column=1)
-        tk.Button(root, text="Actualizar", command=update_pedido).grid(row=6, column=2)
-        tk.Button(root, text="Eliminar", command=delete_pedido).grid(row=6, column=3)
-
-        # Botón Volver
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
-
-        # Lista de registros
-        records_list = tk.Listbox(root, width=100)
-        records_list.grid(row=7, column=0, columnspan=4)
-
-        read_pedidos()
-
-    elif tabla == 'Fabricación':
-        # Configuración de la interfaz para Fabricación
-        tk.Label(root, text="Detalles").grid(row=0, column=0)
-        entry_detalles = tk.Entry(root)
-        entry_detalles.grid(row=0, column=1)
-
-        tk.Label(root, text="Estado1").grid(row=1, column=0)
-        entry_estado1 = tk.Entry(root)
-        entry_estado1.grid(row=1, column=1)
-
-        tk.Label(root, text="Estado2").grid(row=2, column=0)
-        entry_estado2 = tk.Entry(root)
-        entry_estado2.grid(row=2, column=1)
-
-        tk.Label(root, text="Cantidad").grid(row=3, column=0)
-        entry_cantidad = tk.Entry(root)
-        entry_cantidad.grid(row=3, column=1)
-
-        tk.Label(root, text="ID Pedido").grid(row=4, column=0)
-        entry_id_pedido = tk.Entry(root)
-        entry_id_pedido.grid(row=4, column=1)
-
-        # Botones CRUD
-        tk.Button(root, text="Crear", command=create_fabricacion).grid(row=5, column=0)
-        tk.Button(root, text="Leer", command=read_fabricacion).grid(row=5, column=1)
-        tk.Button(root, text="Actualizar", command=update_fabricacion).grid(row=5, column=2)
-        tk.Button(root, text="Eliminar", command=delete_fabricacion).grid(row=5, column=3)
-
-        # Lista de registros
-        records_list = tk.Listbox(root, width=100)
-        records_list.grid(row=6, column=0, columnspan=4)
-
-        read_fabricacion()
-
-        # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
-
-    elif tabla == 'PedidoSantiago':
-        # Configuración de la interfaz para PedidoSantiago
-        tk.Label(root, text="Estado").grid(row=0, column=0)
-        entry_estado = tk.Entry(root)
-        entry_estado.grid(row=0, column=1)
-
-        tk.Label(root, text="ID Pedido").grid(row=1, column=0)
-        entry_id_pedido = tk.Entry(root)
-        entry_id_pedido.grid(row=1, column=1)
-
-        # Botones CRUD
-        tk.Button(root, text="Crear", command=create_pedido_santiago).grid(row=2, column=0)
-        tk.Button(root, text="Leer", command=read_pedido_santiago).grid(row=2, column=1)
-        tk.Button(root, text="Actualizar", command=update_pedido_santiago).grid(row=2, column=2)
-        tk.Button(root, text="Eliminar", command=delete_pedido_santiago).grid(row=2, column=3)
-
-        # Lista de registros
-        records_list = tk.Listbox(root, width=100)
-        records_list.grid(row=3, column=0, columnspan=4)
-
-        read_pedido_santiago()
-
-        # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
+# Función para actualizar registros en la tabla seleccionada
+def update_record():
+    tabla = combo_tablas.get()
+    id_col = columns[0]
+    record_id = form_entries[id_col].get()
     
-    elif tabla == 'PedidoStarken':
-        # Configuración de la interfaz para PedidoStarken
-        tk.Label(root, text="Estado").grid(row=0, column=0)
-        entry_estado = tk.Entry(root)
-        entry_estado.grid(row=0, column=1)
+    if not record_id:
+        messagebox.showwarning("Input error", f"Por favor, ingrese el ID del registro en {id_col} para actualizar")
+        return
+    
+    values = [entry.get() for entry in form_entries.values()]
+    if any(values[1:]):
+        updates = ", ".join(f"{col} = COALESCE(?, {col})" for col in columns[1:])
+        query = f"UPDATE {tabla} SET {updates} WHERE {id_col} = ?"
+        c.execute(query, values[1:] + [record_id])
+        conn.commit()
+        messagebox.showinfo("Success", f"Registro actualizado exitosamente en {tabla}")
+        clear_entries()
+        read_records()
+    else:
+        messagebox.showwarning("Input error", "Por favor, ingrese al menos un dato para actualizar")
 
-        tk.Label(root, text="ID Pedido").grid(row=1, column=0)
-        entry_id_pedido = tk.Entry(root)
-        entry_id_pedido.grid(row=1, column=1)
+# Función para eliminar registros en la tabla seleccionada
+def delete_record():
+    tabla = combo_tablas.get()
+    id_col = columns[0]
+    record_id = form_entries[id_col].get()
+    
+    if not record_id:
+        messagebox.showwarning("Input error", f"Por favor, ingrese el ID del registro en {id_col} para eliminar")
+        return
+    
+    c.execute(f"DELETE FROM {tabla} WHERE {id_col} = ?", (record_id,))
+    conn.commit()
+    messagebox.showinfo("Success", f"Registro eliminado exitosamente en {tabla}")
+    clear_entries()
+    read_records()
 
-        # Botones CRUD
-        tk.Button(root, text="Crear", command=create_pedido_starken).grid(row=2, column=0)
-        tk.Button(root, text="Leer", command=read_pedido_starken).grid(row=2, column=1)
-        tk.Button(root, text="Actualizar", command=update_pedido_starken).grid(row=2, column=2)
-        tk.Button(root, text="Eliminar", command=delete_pedido_starken).grid(row=2, column=3)
+# Función para limpiar las entradas del formulario
+def clear_entries():
+    for entry in form_entries.values():
+        entry.delete(0, tk.END)
 
-        # Lista de registros
-        records_list = tk.Listbox(root, width=100)
-        records_list.grid(row=3, column=0, columnspan=4)
+# Función para leer los registros de la tabla seleccionada
+def read_records():
+    tabla = combo_tablas.get()
+    for i in tree.get_children():
+        tree.delete(i)
+    c.execute(f"SELECT * FROM {tabla}")
+    for row in c.fetchall():
+        tree.insert('', tk.END, values=row)
 
-        read_pedido_starken()
+def main_window():
+    global form_frame, tree, combo_tablas, form_entries
+    
+    root = tk.Tk()
+    root.title("Sistema de Información de Clientes")
 
-        # Botón para volver a la selección de tabla
-        tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
+    # Crear el frame para el formulario
+    form_frame = tk.Frame(root)
+    form_frame.pack(pady=20)
+    
+    # Crear el combo para seleccionar la tabla
+    tk.Label(root, text="Seleccionar Tabla").pack()
+    combo_tablas = ttk.Combobox(root, values=['Cliente', 'pedidos', 'fabricacion', 'PedidoSantiago', 'PedidoStarken'])
+    combo_tablas.pack()
+    combo_tablas.bind("<<ComboboxSelected>>", lambda event: load_table(combo_tablas.get()))
+
+    # Crear el Treeview
+    columns = ()
+    tree = ttk.Treeview(root, columns=columns, show='headings')
+    tree.pack(pady=20, fill='x')
+
+    # Crear el frame para los botones
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=20)
+
+    tk.Button(button_frame, text="Insertar", command=insert_record).pack(side='left', padx=10)
+    tk.Button(button_frame, text="Actualizar", command=update_record).pack(side='left', padx=10)
+    tk.Button(button_frame, text="Eliminar", command=delete_record).pack(side='left', padx=10)
+    tk.Button(button_frame, text="Limpiar", command=clear_entries).pack(side='left', padx=10)
 
     root.mainloop()
-
-# Funciones CRUD tabla Cliente
-def create_cliente():
-    nombre = entry_nombre.get()
-    apellido = entry_apellido.get()
-    rut = entry_rut.get()
-    direccion = entry_direccion.get()
-    comuna = entry_comuna.get()
-    telefono = entry_telefono.get()
-    correo = entry_correo.get()
-    valido, mensaje = validar_campos_cliente(nombre, apellido, rut, direccion, comuna, telefono, correo)
-    if valido:
-        c.execute('INSERT INTO Cliente (Nombre, Apellido, RUT, Dirección, Comuna, Teléfono, Correo) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                  (nombre, apellido, rut, direccion, comuna, telefono, correo))
-        conn.commit()
-        entry_nombre.delete(0, tk.END)
-        entry_apellido.delete(0, tk.END)
-        entry_rut.delete(0, tk.END)
-        entry_direccion.delete(0, tk.END)
-        entry_comuna.delete(0, tk.END)
-        entry_telefono.delete(0, tk.END)
-        entry_correo.delete(0, tk.END)
-        messagebox.showinfo("Success", "Cliente creado exitosamente")
-        read_clientes()
-    else:
-        messagebox.showwarning("Input error", mensaje)
-def read_clientes():
-    records_list.delete(0, tk.END)
-    c.execute('SELECT * FROM Cliente')
-    for row in c.fetchall():
-        records_list.insert(tk.END, row)
-
-def update_cliente():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        cliente_id = selected_record[0]
-        new_nombre = entry_nombre.get()
-        new_apellido = entry_apellido.get()
-        new_rut = entry_rut.get()
-        new_direccion = entry_direccion.get()
-        new_comuna = entry_comuna.get()
-        new_telefono = entry_telefono.get()
-        new_correo = entry_correo.get()
-        if new_nombre and new_apellido and new_rut and new_direccion and new_comuna and new_telefono:
-            c.execute('''UPDATE Cliente 
-                         SET Nombre = ?, Apellido = ?, RUT = ?, Dirección = ?, Comuna = ?, Teléfono = ?, Correo = ? 
-                         WHERE ID_Cliente = ?''',
-                      (new_nombre, new_apellido, new_rut, new_direccion, new_comuna, new_telefono, new_correo, cliente_id))
-            conn.commit()
-            entry_nombre.delete(0, tk.END)
-            entry_apellido.delete(0, tk.END)
-            entry_rut.delete(0, tk.END)
-            entry_direccion.delete(0, tk.END)
-            entry_comuna.delete(0, tk.END)
-            entry_telefono.delete(0, tk.END)
-            entry_correo.delete(0, tk.END)
-            messagebox.showinfo("Success", "Cliente actualizado exitosamente")
-            read_clientes()
-        else:
-            messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un cliente para actualizar")
-
-def delete_cliente():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        cliente_id = selected_record[0]
-        c.execute('DELETE FROM Cliente WHERE ID_Cliente = ?', (cliente_id,))
-        conn.commit()
-        messagebox.showinfo("Success", "Cliente eliminado exitosamente")
-        read_clientes()
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un cliente para eliminar")
-
-#CRUD Fabricacion        
-def create_fabricacion():
-    detalles = entry_detalles.get()
-    estado1 = entry_estado1.get()
-    estado2 = entry_estado2.get()
-    cantidad = entry_cantidad.get()
-    id_pedido = entry_id_pedido.get()
-    if detalles and estado1 and estado2 and cantidad and id_pedido:
-        c.execute('INSERT INTO fabricacion (Detalles, Estado1, Estado2, Cantidad, ID_Pedido) VALUES (?, ?, ?, ?, ?)',
-                  (detalles, estado1, estado2, cantidad, id_pedido))
-        conn.commit()
-        entry_detalles.delete(0, tk.END)
-        entry_estado1.delete(0, tk.END)
-        entry_estado2.delete(0, tk.END)
-        entry_cantidad.delete(0, tk.END)
-        entry_id_pedido.delete(0, tk.END)
-        messagebox.showinfo("Success", "Fabricación creada exitosamente")
-        read_fabricacion()
-    else:
-        messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-
-def read_fabricacion():
-    records_list.delete(0, tk.END)
-    c.execute('SELECT * FROM fabricacion')
-    for row in c.fetchall():
-        records_list.insert(tk.END, row)
-
-def update_fabricacion():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        fabricacion_id = selected_record[0]
-        new_detalles = entry_detalles.get()
-        new_estado1 = entry_estado1.get()
-        new_estado2 = entry_estado2.get()
-        new_cantidad = entry_cantidad.get()
-        new_id_pedido = entry_id_pedido.get()
-        if new_detalles and new_estado1 and new_estado2 and new_cantidad and new_id_pedido:
-            c.execute('''UPDATE fabricacion 
-                         SET Detalles = ?, Estado1 = ?, Estado2 = ?, Cantidad = ?, ID_Pedido = ? 
-                         WHERE ID_Fabricacion = ?''',
-                      (new_detalles, new_estado1, new_estado2, new_cantidad, new_id_pedido, fabricacion_id))
-            conn.commit()
-            entry_detalles.delete(0, tk.END)
-            entry_estado1.delete(0, tk.END)
-            entry_estado2.delete(0, tk.END)
-            entry_cantidad.delete(0, tk.END)
-            entry_id_pedido.delete(0, tk.END)
-            messagebox.showinfo("Success", "Fabricación actualizada exitosamente")
-            read_fabricacion()
-        else:
-            messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione una fabricación para actualizar")
-
-def delete_fabricacion():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        fabricacion_id = selected_record[0]
-        c.execute('DELETE FROM fabricacion WHERE ID_Fabricacion = ?', (fabricacion_id,))
-        conn.commit()
-        messagebox.showinfo("Success", "Fabricación eliminada exitosamente")
-        read_fabricacion()
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione una fabricación para eliminar")
-
-#CRUD tabla Pedido
-def create_pedido():
-    total = entry_total.get()
-    pago = entry_pago.get()
-    tipo_despacho = entry_tipo_despacho.get()
-    especificacion = entry_especificacion.get()
-    fecha = entry_fecha.get()
-    rut = entry_rut.get()
-    if total and pago and tipo_despacho and especificacion and fecha and rut:
-        c.execute('INSERT INTO pedidos (Total, Pago, Tipo_Despacho, Especificación, Fecha, RUT) VALUES (?, ?, ?, ?, ?, ?)',
-                  (total, pago, tipo_despacho, especificacion, fecha, rut))
-        conn.commit()
-        entry_total.delete(0, tk.END)
-        entry_pago.delete(0, tk.END)
-        entry_tipo_despacho.delete(0, tk.END)
-        entry_especificacion.delete(0, tk.END)
-        entry_fecha.delete(0, tk.END)
-        entry_rut.delete(0, tk.END)
-        messagebox.showinfo("Success", "Pedido creado exitosamente")
-        read_pedidos()
-    else:
-        messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-
-def read_pedidos():
-    records_list.delete(0, tk.END)
-    c.execute('SELECT * FROM pedidos')
-    for row in c.fetchall():
-        records_list.insert(tk.END, row)
-
-def update_pedido():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        pedido_id = selected_record[0]
-        new_total = entry_total.get()
-        new_pago = entry_pago.get()
-        new_tipo_despacho = entry_tipo_despacho.get()
-        new_especificacion = entry_especificacion.get()
-        new_fecha = entry_fecha.get()
-        new_rut = entry_rut.get()
-        if new_total and new_pago and new_tipo_despacho and new_especificacion and new_fecha and new_rut:
-            c.execute('''UPDATE pedidos 
-                         SET Total = ?, Pago = ?, Tipo_Despacho = ?, Especificación = ?, Fecha = ?, RUT = ? 
-                         WHERE ID_Pedido = ?''',
-                      (new_total, new_pago, new_tipo_despacho, new_especificacion, new_fecha, new_rut, pedido_id))
-            conn.commit()
-            entry_total.delete(0, tk.END)
-            entry_pago.delete(0, tk.END)
-            entry_tipo_despacho.delete(0, tk.END)
-            entry_especificacion.delete(0, tk.END)
-            entry_fecha.delete(0, tk.END)
-            entry_rut.delete(0, tk.END)
-            messagebox.showinfo("Success", "Pedido actualizado exitosamente")
-            read_pedidos()
-        else:
-            messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un pedido para actualizar")
-
-def delete_pedido():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        pedido_id = selected_record[0]
-        c.execute('DELETE FROM pedidos WHERE ID_Pedido = ?', (pedido_id,))
-        conn.commit()
-        messagebox.showinfo("Success", "Pedido eliminado exitosamente")
-        read_pedidos()
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un pedido para eliminar")
-
-#CRUD PedidoSantiago
-def create_pedido_santiago():
-    estado = entry_estado.get()
-    id_pedido = entry_id_pedido.get()
-    if estado and id_pedido:
-        c.execute('INSERT INTO PedidoSantiago (Estado, ID_Pedido) VALUES (?, ?)',
-                  (estado, id_pedido))
-        conn.commit()
-        entry_estado.delete(0, tk.END)
-        entry_id_pedido.delete(0, tk.END)
-        messagebox.showinfo("Success", "Pedido Santiago creado exitosamente")
-        read_pedido_santiago()
-    else:
-        messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-
-def read_pedido_santiago():
-    records_list.delete(0, tk.END)
-    c.execute('SELECT * FROM PedidoSantiago')
-    for row in c.fetchall():
-        records_list.insert(tk.END, row)
-
-def update_pedido_santiago():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        pedido_santiago_id = selected_record[0]
-        new_estado = entry_estado.get()
-        new_id_pedido = entry_id_pedido.get()
-        if new_estado and new_id_pedido:
-            c.execute('''UPDATE PedidoSantiago 
-                         SET Estado = ?, ID_Pedido = ? 
-                         WHERE ID_PedidoSantiago = ?''',
-                      (new_estado, new_id_pedido, pedido_santiago_id))
-            conn.commit()
-            entry_estado.delete(0, tk.END)
-            entry_id_pedido.delete(0, tk.END)
-            messagebox.showinfo("Success", "Pedido Santiago actualizado exitosamente")
-            read_pedido_santiago()
-        else:
-            messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un Pedido Santiago para actualizar")
-
-def delete_pedido_santiago():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        pedido_santiago_id = selected_record[0]
-        c.execute('DELETE FROM PedidoSantiago WHERE ID_PedidoSantiago = ?', (pedido_santiago_id,))
-        conn.commit()
-        messagebox.showinfo("Success", "Pedido Santiago eliminado exitosamente")
-        read_pedido_santiago()
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un Pedido Santiago para eliminar")
-
-#CRUD PedidosStarken
-def create_pedido_starken():
-    estado = entry_estado.get()
-    id_pedido = entry_id_pedido.get()
-    if estado and id_pedido:
-        c.execute('INSERT INTO PedidoStarken (Estado, ID_Pedido) VALUES (?, ?)',
-                  (estado, id_pedido))
-        conn.commit()
-        entry_estado.delete(0, tk.END)
-        entry_id_pedido.delete(0, tk.END)
-        messagebox.showinfo("Success", "Pedido Starken creado exitosamente")
-        read_pedido_starken()
-    else:
-        messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-
-def read_pedido_starken():
-    records_list.delete(0, tk.END)
-    c.execute('SELECT * FROM PedidoStarken')
-    for row in c.fetchall():
-        records_list.insert(tk.END, row)
-
-def update_pedido_starken():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        pedido_starken_id = selected_record[0]
-        new_estado = entry_estado.get()
-        new_id_pedido = entry_id_pedido.get()
-        if new_estado and new_id_pedido:
-            c.execute('''UPDATE PedidoStarken 
-                         SET Estado = ?, ID_Pedido = ? 
-                         WHERE ID_PedidoStarken = ?''',
-                      (new_estado, new_id_pedido, pedido_starken_id))
-            conn.commit()
-            entry_estado.delete(0, tk.END)
-            entry_id_pedido.delete(0, tk.END)
-            messagebox.showinfo("Success", "Pedido Starken actualizado exitosamente")
-            read_pedido_starken()
-        else:
-            messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un Pedido Starken para actualizar")
-
-def delete_pedido_starken():
-    try:
-        selected_record = records_list.get(records_list.curselection())
-        pedido_starken_id = selected_record[0]
-        c.execute('DELETE FROM PedidoStarken WHERE ID_PedidoStarken = ?', (pedido_starken_id,))
-        conn.commit()
-        messagebox.showinfo("Success", "Pedido Starken eliminado exitosamente")
-        read_pedido_starken()
-    except:
-        messagebox.showwarning("Selection error", "Por favor, seleccione un Pedido Starken para eliminar")
-
-# Ventana de consultas de tablas simplificada
-def consulta_tabla_simplificada():
-    global combo_tablas, consulta_simplificada_window, tree
-
-    consulta_simplificada_window = tk.Tk()
-    consulta_simplificada_window.title("Consulta de Tablas Simplificada")
-
-    tk.Label(consulta_simplificada_window, text="Seleccionar Tabla").grid(row=0, column=0)
-    combo_tablas = ttk.Combobox(consulta_simplificada_window, values=['Cliente', 'Pedidos', 'Fabricación', 'PedidoSantiago', 'PedidoStarken'])
-    combo_tablas.grid(row=0, column=1)
-
-    tk.Button(consulta_simplificada_window, text="Ver Contenido", command=ejecutar_consulta_simplificada).grid(row=0, column=2)
-
-    tree = ttk.Treeview(consulta_simplificada_window)
-    tree.grid(row=1, column=0, columnspan=3)
-
-    tk.Button(consulta_simplificada_window, text="Volver", command=lambda: [consulta_simplificada_window.destroy(), tabla_seleccion_window()]).grid(row=2, column=0, columnspan=3)
-
-def ejecutar_consulta_simplificada():
-    tabla = combo_tablas.get()
-    if tabla:
-        try:
-            c.execute(f"SELECT * FROM {tabla}")
-            columns = [desc[0] for desc in c.description]
-            rows = c.fetchall()
-
-            tree.delete(*tree.get_children())
-            tree["columns"] = columns
-            for col in columns:
-                tree.heading(col, text=col)
-                tree.column(col, width=100)
-
-            for row in rows:
-                tree.insert("", "end", values=row)
-        except sqlite3.Error as e:
-            messagebox.showerror("Error", f"Error en la consulta: {e}")
-
-# Ventana de selección de tabla
-def tabla_seleccion_window():
-    global tabla_seleccion
-    tabla_seleccion = tk.Tk()
-    tabla_seleccion.title("Seleccionar Tabla")
-
-    tk.Button(tabla_seleccion, text="Cliente", command=lambda: [tabla_seleccion.destroy(), main_window('Cliente')]).pack(pady=10)
-    tk.Button(tabla_seleccion, text="Pedidos", command=lambda: [tabla_seleccion.destroy(), main_window('Pedidos')]).pack(pady=10)
-    tk.Button(tabla_seleccion, text="Fabricación", command=lambda: [tabla_seleccion.destroy(), main_window('Fabricación')]).pack(pady=10)
-    tk.Button(tabla_seleccion, text="PedidoSantiago", command=lambda: [tabla_seleccion.destroy(), main_window('PedidoSantiago')]).pack(pady=10)
-    tk.Button(tabla_seleccion, text="PedidoStarken", command=lambda: [tabla_seleccion.destroy(), main_window('PedidoStarken')]).pack(pady=10)
-    tk.Button(tabla_seleccion, text="Consultar", command=lambda: [tabla_seleccion.destroy(), consulta_tabla_simplificada()]).pack(pady=10)
-
-    tabla_seleccion.mainloop()
-
-# Ventana de consultas de tablas
-def consulta_tabla_window():
-    global entry_query, consulta_window, tree
-
-    consulta_window = tk.Tk()
-    consulta_window.title("Consulta de Tablas")
-
-    tk.Label(consulta_window, text="Consulta SQL").grid(row=0, column=0)
-    entry_query = tk.Entry(consulta_window, width=100)
-    entry_query.grid(row=0, column=1)
-
-    tk.Button(consulta_window, text="Ejecutar", command=ejecutar_consulta).grid(row=0, column=2)
-
-    tree = ttk.Treeview(consulta_window)
-    tree.grid(row=1, column=0, columnspan=3)
-
-    tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
-
-def ejecutar_consulta():
-    query = entry_query.get()
-    if query:
-        try:
-            c.execute(query)
-            columns = [desc[0] for desc in c.description]
-            rows = c.fetchall()
-
-            tree.delete(*tree.get_children())
-            tree["columns"] = columns
-            for col in columns:
-                tree.heading(col, text=col)
-                tree.column(col, width=100)
-
-            for row in rows:
-                tree.insert("", "end", values=row)
-        except sqlite3.Error as e:
-            messagebox.showerror("Error", f"Error en la consulta: {e}")
-
-# Ventana de registro
-def open_register_window():
-    global entry_rut_register, entry_password_register, entry_confirm_password_register, register_window
-
-    register_window = tk.Toplevel(login_window)
-    register_window.title("Registrar Usuario")
-
-    tk.Label(register_window, text="RUT").grid(row=0, column=0)
-    entry_rut_register = tk.Entry(register_window)
-    entry_rut_register.grid(row=0, column=1)
-
-    tk.Label(register_window, text="Contraseña").grid(row=1, column=0)
-    entry_password_register = tk.Entry(register_window, show="*")
-    entry_password_register.grid(row=1, column=1)
-
-    tk.Label(register_window, text="Confirmar Contraseña").grid(row=2, column=0)
-    entry_confirm_password_register = tk.Entry(register_window, show="*")
-    entry_confirm_password_register.grid(row=2, column=1)
-
-    tk.Button(register_window, text="Registrar", command=registrar_usuario).grid(row=3, column=0, columnspan=2)
-
-# Ventana de recuperación de contraseña
-def open_recovery_window():
-    global entry_rut_recovery, entry_new_password_recovery, entry_confirm_new_password_recovery, recovery_window
-
-    recovery_window = tk.Toplevel(login_window)
-    recovery_window.title("Recuperar Contraseña")
-
-    tk.Label(recovery_window, text="RUT").grid(row=0, column=0)
-    entry_rut_recovery = tk.Entry(recovery_window)
-    entry_rut_recovery.grid(row=0, column=1)
-
-    tk.Label(recovery_window, text="Nueva Contraseña").grid(row=1, column=0)
-    entry_new_password_recovery = tk.Entry(recovery_window, show="*")
-    entry_new_password_recovery.grid(row=1, column=1)
-
-    tk.Label(recovery_window, text="Confirmar Nueva Contraseña").grid(row=2, column=0)
-    entry_confirm_new_password_recovery = tk.Entry(recovery_window, show="*")
-    entry_confirm_new_password_recovery.grid(row=2, column=1)
-
-    tk.Button(recovery_window, text="Restablecer Contraseña", command=recuperar_contraseña).grid(row=3, column=0, columnspan=2)
-
-    tk.Button(root, text="Volver", command=lambda: [root.destroy(), tabla_seleccion_window()]).grid(row=0, column=3, sticky='e')
 
 # Ventana de inicio de sesión
 login_window = tk.Tk()
@@ -742,10 +177,6 @@ entry_password = tk.Entry(login_window, show="*")
 entry_password.grid(row=1, column=1)
 
 tk.Button(login_window, text="Iniciar Sesión", command=autenticar_usuario).grid(row=2, column=0, columnspan=2)
-tk.Button(login_window, text="Registrar", command=open_register_window).grid(row=3, column=0, columnspan=2)
-tk.Button(login_window, text="Recuperar Contraseña", command=open_recovery_window).grid(row=4, column=0, columnspan=2)
-
 
 login_window.mainloop()
 conn.close()
-
