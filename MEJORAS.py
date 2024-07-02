@@ -3,16 +3,13 @@ from tkinter import ttk, messagebox
 from ttkthemes import ThemedTk
 import sqlite3
 import re
+import pyperclip
 from fpdf import FPDF
 
 # Conexión a la base de datos SQLite
 db_path = 'empresa.db'
-try:
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-except sqlite3.OperationalError as e:
-    print(f"No se puede abrir el archivo de la base de datos: {e}")
-    exit()
+conn = sqlite3.connect(db_path)
+c = conn.cursor()
 
 # Función para validar el RUT
 def validar_rut(rut):
@@ -32,7 +29,7 @@ def insertar_usuario(rut, contraseña):
     try:
         c.execute("INSERT INTO USUARIOS (RUT, contraseña) VALUES (?, ?)", (rut, contraseña))
         conn.commit()
-        messagebox.showinfo("Éxito", "Usuario insertado exitosamente")
+        messagebox.showinfo("Success", "Usuario insertado exitosamente")
     except sqlite3.IntegrityError:
         messagebox.showwarning("Error", "El RUT ya está registrado")
 
@@ -53,268 +50,221 @@ def autenticar_usuario():
     else:
         messagebox.showerror("Error de inicio de sesión", "RUT o contraseña incorrectos")
 
-def main_window():
-    global form_frame, tree, combo_tablas, form_entries, search_entry, search_field, all_records, entry_numero_rut, entry_dv, root
-
-    root = ThemedTk(theme="breeze")
-    root.title("Casa de la Impresión")
-    root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False)) # PANTALLA COMPLETA SIN BORDES
-    root.state('zoomed')
-
-    # Frame fijo en la parte superior para los botones y la búsqueda
-    fixed_frame = tk.Frame(root, bg="#f0f0f0")
-    fixed_frame.pack(side=tk.TOP, fill=tk.X, pady=10)
-
-    button_frame = ttk.Frame(fixed_frame, padding=10)
-    button_frame.pack(side=tk.LEFT, padx=20)
-
-    ttk.Button(button_frame, text="Insertar", command=ventana_insertar, style="TButton").pack(side='left', padx=10)
-    ttk.Button(button_frame, text="Actualizar", command=update_record, style="TButton").pack(side='left', padx=10)
-    ttk.Button(button_frame, text="Eliminar", command=delete_record, style="TButton").pack(side='left', padx=10)
-    ttk.Button(button_frame, text="Limpiar", command=clear_entries, style="TButton").pack(side='left', padx=10)
-    ttk.Button(button_frame, text="Ver Inventario", command=mostrar_inventario, style="TButton").pack(side='left', padx=10)
-
-    search_frame = tk.Frame(fixed_frame, bg="#f0f0f0")
-    search_frame.pack(side=tk.RIGHT, padx=20)
-
-    ttk.Label(search_frame, text="Buscar por", background="#f0f0f0", font=("Helvetica", 12)).grid(row=0, column=0, padx=10)
-    search_field = ttk.Combobox(search_frame)
-    search_field.grid(row=0, column=1, padx=10)
-
-    ttk.Label(search_frame, text="Buscar", background="#f0f0f0", font=("Helvetica", 12)).grid(row=0, column=2, padx=10)
-    search_entry = tk.Entry(search_frame)
-    search_entry.grid(row=0, column=3, padx=10)
-
-    ttk.Button(search_frame, text="Filtrar", command=filter_records, style="TButton").grid(row=0, column=4, padx=10)
-
-    # Crear el frame para el formulario
-    form_frame = tk.Frame(root)
-    form_frame.pack(pady=20, fill=tk.X)
-
-    ttk.Label(root, text="Seleccionar Tabla", background="#f0f0f0", font=("Helvetica", 12)).pack(pady=10)
-    combo_tablas = ttk.Combobox(root, values=['CLIENTE', 'PEDIDOS', 'FABRICACION', 'PEDIDOSANTIAGO', 'PEDIDOSTARKEN'])
-    combo_tablas.pack()
-    combo_tablas.bind("<<ComboboxSelected>>", lambda event: load_table(combo_tablas.get()))
-
-    # Sección de la tabla desplazable
-    table_frame = tk.Frame(root, bg="#f0f0f0")
-    table_frame.pack(fill=tk.BOTH, expand=True)
-
-    columns = ()
-    tree = ttk.Treeview(table_frame, columns=columns, show='headings')
-    tree.pack(pady=20, fill=tk.BOTH, expand=True)
-
-    # Configurar el estilo de la barra de desplazamiento
-    style = ttk.Style()
-    style.configure("Vertical.TScrollbar", gripcount=0,
-                    background="#f0f0f0", darkcolor="#d3d3d3", lightcolor="#d3d3d3",
-                    troughcolor="#f0f0f0", bordercolor="#d3d3d3", arrowcolor="#d3d3d3",
-                    width=30, arrowsize=20)
-
-    scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview, style="Vertical.TScrollbar")
-    tree.configure(yscrollcommand=scrollbar.set)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
-
-    tree.bind("<<TreeviewSelect>>", on_tree_select)
-
-    root.mainloop()
 
 # Función para cargar la tabla seleccionada
 def load_table(tabla):
-    global columns, form_entries, all_records, entry_numero_rut, entry_dv, estado_combobox, aprobado_combobox
+    global columns, form_entries, entry_numero_rut, entry_dv, estado_combobox, aprobado_combobox
+
     for widget in form_frame.winfo_children():
         widget.destroy()
 
     form_entries = {}
-
+    
     if tabla == 'CLIENTE':
-        columns = ("ID_Cliente", "Nombre", "Apellido", "RUT", "Dirección", "Comuna", "Teléfono", "Correo")
+        columns = ["ID_Cliente", "Nombre", "Apellido", "RUT", "Dirección", "Comuna", "Teléfono", "Correo"]
         
         # Añadir campos para número RUT y dígito verificador solo si la tabla es Cliente
-        ttk.Label(form_frame, text="Número RUT").grid(row=3, column=0, padx=5, pady=5, sticky='W')
+        ttk.Label(form_frame, text="RUT").grid(row=3, column=0, padx=5, pady=5, sticky='W')
         entry_numero_rut = ttk.Entry(form_frame)
         entry_numero_rut.grid(row=3, column=1, padx=5, pady=5, sticky='W')
 
-        ttk.Label(form_frame, text="Dígito Verificador").grid(row=3, column=2, padx=5, pady=5, sticky='W')
+        ttk.Label(form_frame, text="-").grid(row=3, column=2, padx=5, pady=5, sticky='W')
         entry_dv = ttk.Entry(form_frame, width=5)
         entry_dv.grid(row=3, column=3, padx=5, pady=5, sticky='W')
+        
+        # Crear las entradas para cada columna excepto ID_Cliente
+        for i, col in enumerate(columns):
+            if col == "ID_Cliente":
+                entry = ttk.Entry(form_frame, state='W')
+            elif col == "RUT":
+                continue  # No agregar campo de RUT directamente en el formulario
+            else:
+                entry = ttk.Entry(form_frame)
+            
+            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
+            entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
+            form_entries[col] = entry
+
     elif tabla == 'PEDIDOS':
-        columns = ("ID_Pedido", "Total", "Pago", "Tipo_Despacho", "Especificación", "Fecha", "RUT")
+        columns = ["ID_Pedido", "Total", "Pago", "Tipo_Despacho", "Especificación", "Fecha", "RUT"]
 
         # Añadir campos para número RUT y dígito verificador
-        ttk.Label(form_frame, text="Número RUT").grid(row=6, column=0, padx=5, pady=5, sticky='W')
+        ttk.Label(form_frame, text="RUT").grid(row=6, column=0, padx=5, pady=5, sticky='W')
         entry_numero_rut = ttk.Entry(form_frame)
         entry_numero_rut.grid(row=6, column=1, padx=5, pady=5, sticky='W')
 
-        ttk.Label(form_frame, text="Dígito Verificador").grid(row=6, column=2, padx=5, pady=5, sticky='W')
+        ttk.Label(form_frame, text="-").grid(row=6, column=2, padx=5, pady=5, sticky='W')
         entry_dv = ttk.Entry(form_frame, width=5)
         entry_dv.grid(row=6, column=3, padx=5, pady=5, sticky='W')
-    elif tabla == 'FABRICACION':
-        columns = ("ID_Fabricacion", "Detalles", "Estado", "Aprobado", "Cantidad", "ID_Pedido")
         
-        # Añadir campo para Estado con menú desplegable
-        ttk.Label(form_frame, text="Estado").grid(row=2, column=0, padx=5, pady=5, sticky='W')
-        estado_combobox = ttk.Combobox(form_frame, values=["Empaquetado", "No Empaquetado"])
-        estado_combobox.grid(row=2, column=1, padx=5, pady=5, sticky='W')
-        form_entries["Estado"] = estado_combobox
+        # Crear las entradas para cada columna excepto ID_Pedido
+        for i, col in enumerate(columns):
+            if col == "ID_Pedido":
+                entry = ttk.Entry(form_frame, state='W')
+            elif col == "RUT":
+                continue  # No agregar campo de RUT directamente en el formulario
+            elif col == "Tipo_Despacho":
+                entry = ttk.Combobox(form_frame, values=["Domicilio", "Sucursal"])
+            else:
+                entry = ttk.Entry(form_frame)
+            
+            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
+            entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
+            form_entries[col] = entry
 
-        # Añadir campo para Aprobado con menú desplegable
-        ttk.Label(form_frame, text="Aprobado").grid(row=3, column=0, padx=5, pady=5, sticky='W')
-        aprobado_combobox = ttk.Combobox(form_frame, values=["Sí", "No"])
-        aprobado_combobox.grid(row=3, column=1, padx=5, pady=5, sticky='W')
-        form_entries["Aprobado"] = aprobado_combobox
+    elif tabla == 'FABRICACION':
+        columns = ["ID_Fabricacion", "Detalles", "Estado", "Aprobado", "Cantidad", "ID_Pedido"]
+        
+        # Crear las entradas para cada columna excepto ID_Fabricacion
+        for i, col in enumerate(columns):
+            if col == "ID_Fabricacion":
+                entry = ttk.Entry(form_frame, state='W')
+            elif col == "Estado":
+                entry = ttk.Combobox(form_frame, values=["Empaquetado", "No Empaquetado"])
+            elif col == "Aprobado":
+                entry = ttk.Combobox(form_frame, values=["Sí", "No"])
+            else:
+                entry = ttk.Entry(form_frame)
+            
+            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
+            entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
+            form_entries[col] = entry
 
-        # Añadir campo para ID_Pedido
-        ttk.Label(form_frame, text="ID_Pedido").grid(row=5, column=0, padx=5, pady=5, sticky='W')
-        id_pedido_entry = ttk.Entry(form_frame)
-        id_pedido_entry.grid(row=5, column=1, padx=5, pady=5, sticky='W')
-        form_entries["ID_Pedido"] = id_pedido_entry
-
-        # Validar que el campo Cantidad solo acepte números enteros
-        def validar_cantidad(event):
-            if not form_entries["Cantidad"].get().isdigit():
-                messagebox.showerror("Error", "Cantidad debe ser un número entero")
-                form_entries["Cantidad"].delete(0, tk.END)
-
-        ttk.Label(form_frame, text="Cantidad").grid(row=4, column=0, padx=5, pady=5, sticky='W')
-        cantidad_entry = ttk.Entry(form_frame)
-        cantidad_entry.grid(row=4, column=1, padx=5, pady=5, sticky='W')
-        cantidad_entry.bind("<FocusOut>", validar_cantidad)
-        form_entries["Cantidad"] = cantidad_entry
-
-    elif tabla == 'PEDIDOSANTIAGO':
-        columns = ("ID_PedidoSantiago", "Estado", "ID_Pedido")
-
-        # Añadir campo para Estado con menú desplegable
-        ttk.Label(form_frame, text="Estado").grid(row=2, column=0, padx=5, pady=5, sticky='W')
-        estado_combobox = ttk.Combobox(form_frame, values=["Entregado", "Cancelado", "En tránsito", "Procesando", "Atrasado"])
-        estado_combobox.grid(row=2, column=1, padx=5, pady=5, sticky='W')
-        form_entries["Estado"] = estado_combobox
-
-        # Añadir campo para ID_Pedido
-        ttk.Label(form_frame, text="ID_Pedido").grid(row=3, column=0, padx=5, pady=5, sticky='W')
-        id_pedido_entry = ttk.Entry(form_frame)
-        id_pedido_entry.grid(row=3, column=1, padx=5, pady=5, sticky='W')
-        form_entries["ID_Pedido"] = id_pedido_entry
-
-    elif tabla == 'PEDIDOSTARKEN':
-        columns = ("ID_PedidoStarken", "Estado", "ID_Pedido")
-
-        # Añadir campo para Estado con menú desplegable
-        ttk.Label(form_frame, text="Estado").grid(row=2, column=0, padx=5, pady=5, sticky='W')
-        estado_combobox = ttk.Combobox(form_frame, values=["Entregado", "Cancelado", "En tránsito", "Procesando", "Atrasado"])
-        estado_combobox.grid(row=2, column=1, padx=5, pady=5, sticky='W')
-        form_entries["Estado"] = estado_combobox
-
-        # Añadir campo para ID_Pedido
-        ttk.Label(form_frame, text="ID_Pedido").grid(row=3, column=0, padx=5, pady=5, sticky='W')
-        id_pedido_entry = ttk.Entry(form_frame)
-        id_pedido_entry.grid(row=3, column=1, padx=5, pady=5, sticky='W')
-        form_entries["ID_Pedido"] = id_pedido_entry
-
+    # Configurar las columnas del Treeview
     tree["columns"] = columns
     for col in columns:
         tree.heading(col, text=col, command=lambda _col=col: sort_column(tree, _col, False))
 
-    for i, col in enumerate(columns):
-        if col == "RUT" or col.startswith("ID_"):
-            continue  # No agregar campo de RUT o ID directamente en el formulario
-        if col not in form_entries:  # Añadir solo si no está ya en form_entries
-            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
-            if col == "Pago" and tabla == 'PEDIDOS':
-                entry = ttk.Combobox(form_frame, values=["Efectivo", "Tarjeta", "Transferencia"])
-            elif col == "Tipo_Despacho" and tabla == 'PEDIDOS':
-                entry = ttk.Combobox(form_frame, values=["Domicilio", "Sucursal"])
-            else:
-                entry = ttk.Entry(form_frame)
-            entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
-            form_entries[col] = entry
-
-    search_field['values'] = [col for col in columns if not col.startswith("ID_")]  # Actualizar el Combobox de búsqueda
+    search_field['values'] = columns  # Actualizar el Combobox de búsqueda
     read_records()
 
+
+    
+# Función para insertar un nuevo cliente y mostrar la ventana de pedido
+def insertar_cliente():
+    cliente_values = [form_entries[col].get() for col in columns if col != "ID_Cliente"]
+
+    if all(cliente_values):
+        query = f"INSERT INTO CLIENTE (Nombre, Apellido, RUT, Dirección, Comuna, Teléfono, Correo) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        try:
+            c.execute(query, cliente_values)
+            conn.commit()
+            messagebox.showinfo("Success", "Cliente insertado exitosamente")
+            clear_entries()
+            read_records()
+            ventana_pedido(cliente_values[2])  # El RUT es el tercer valor en cliente_values
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error al insertar el cliente: {e}")
+    else:
+        messagebox.showwarning("Input error", "Por favor, complete todos los campos")
+
+# Función para mostrar la ventana de pedido
+def ventana_pedido(rut):
+    def agregar_pedido():
+        valores_pedido = [entry.get() for entry in pedido_entries.values()]
+        if all(valores_pedido):
+            valores_pedido.append(rut)  # Añadir el RUT al final de los valores del pedido
+            c.execute("INSERT INTO PEDIDOS (Total, Pago, Tipo_Despacho, Especificación, Fecha, RUT) VALUES (?, ?, ?, ?, ?, ?)", valores_pedido)
+            conn.commit()
+            messagebox.showinfo("Success", "Pedido insertado exitosamente")
+            pedido_window.destroy()
+        else:
+            messagebox.showwarning("Input error", "Por favor, complete todos los campos del pedido")
+
+    pedido_window = tk.Toplevel()
+    pedido_window.title("Agregar Pedido")
+
+    pedido_columns = ("Total", "Pago", "Tipo_Despacho", "Especificación", "Fecha")
+    pedido_entries = {}
+    for i, col in enumerate(pedido_columns):
+        ttk.Label(pedido_window, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
+        if col == "Tipo_Despacho":
+            entry = ttk.Combobox(pedido_window, values=["Domicilio", "Sucursal"])
+        else:
+            entry = ttk.Entry(pedido_window)
+        entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
+        pedido_entries[col] = entry
+
+
+    # Añadir el campo RUT sin permitir su edición
+    ttk.Label(pedido_window, text="RUT").grid(row=len(pedido_columns), column=0, padx=5, pady=5, sticky='W')
+    entry_rut = ttk.Entry(pedido_window)
+    entry_rut.grid(row=len(pedido_columns), column=1, padx=5, pady=5, sticky='W')
+    entry_rut.insert(0, rut)
+    entry_rut.config(state='disabled')
+
+    ttk.Button(pedido_window, text="Agregar Pedido", command=agregar_pedido).grid(row=len(pedido_columns)+1, column=0, columnspan=2, padx=5, pady=5)
+
 # Función para insertar registros en la tabla seleccionada
-def ventana_insertar():
+def insert_record():
     tabla = combo_tablas.get()
+    values = [entry.get() for entry in form_entries.values()]
 
-    insertar_window = tk.Toplevel(root)
-    insertar_window.title("Insertar Datos")
-    insertar_form_entries = {}
-
-    for i, col in enumerate(columns):
-        if col == "RUT" and tabla in ('CLIENTE', 'PEDIDOS'):
-            ttk.Label(insertar_window, text="Número RUT").grid(row=i, column=0, padx=5, pady=5, sticky='W')
-            entry_numero_rut = ttk.Entry(insertar_window)
-            entry_numero_rut.grid(row=i, column=1, padx=5, pady=5, sticky='W')
-
-            ttk.Label(insertar_window, text="Dígito Verificador").grid(row=i, column=2, padx=5, pady=5, sticky='W')
-            entry_dv = ttk.Entry(insertar_window, width=5)
-            entry_dv.grid(row=i, column=3, padx=5, pady=5, sticky='W')
-
-            insertar_form_entries["numero_rut"] = entry_numero_rut
-            insertar_form_entries["dv"] = entry_dv
-        elif col == "Aprobado" and tabla == 'FABRICACION':
-            ttk.Label(insertar_window, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
-            entry = ttk.Combobox(insertar_window, values=["Sí", "No"])
-            entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
-            insertar_form_entries[col] = entry
-        elif col == "Estado" and tabla in ('FABRICACION', 'PEDIDOSANTIAGO', 'PEDIDOSTARKEN'):
-            ttk.Label(insertar_window, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
-            entry = ttk.Combobox(insertar_window, values=["Entregado", "Cancelado", "En tránsito", "Procesando", "Atrasado"])
-            entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
-            insertar_form_entries[col] = entry
-        else:
-            ttk.Label(insertar_window, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
-            entry = ttk.Entry(insertar_window)
-            entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
-            insertar_form_entries[col] = entry
-
-    def submit_insertar():
-        values = [entry.get() for entry in insertar_form_entries.values()]
-
-        if tabla in ('CLIENTE', 'PEDIDOS'):
-            numero_rut = insertar_form_entries["numero_rut"].get()
-            dv = insertar_form_entries["dv"].get()
-            rut_completo = obtener_rut_completo(numero_rut, dv)
-
-            if not validar_rut(rut_completo):
-                messagebox.showwarning("Error", "El RUT no es válido")
+    if tabla == 'FABRICACION':
+        # Asegurarse de que los valores "Sí" y "No" se manejen como texto
+        if "Aprobado" in form_entries:
+            aprobado_val = form_entries["Aprobado"].get()
+            if aprobado_val not in ["Sí", "No"]:
+                messagebox.showwarning("Input error", "El valor de 'Aprobado' debe ser 'Sí' o 'No'")
                 return
+            values[3] = aprobado_val
+    
+    if tabla == 'CLIENTE':
+        numero_rut = entry_numero_rut.get()
+        dv = entry_dv.get()
+        rut_completo = obtener_rut_completo(numero_rut, dv)
 
-            if tabla == 'CLIENTE':
-                values.insert(3, rut_completo)
-            elif tabla == 'PEDIDOS':
-                values.insert(6, rut_completo)
+        if not validar_rut(rut_completo):
+            messagebox.showwarning("Error", "El RUT no es válido")
+            return
 
-        if all(values):
-            placeholders = ", ".join("?" for _ in values[1:])
-            columns_str = ", ".join(columns[1:])
-            query = f"INSERT INTO {tabla} ({columns_str}) VALUES ({placeholders})"
-            try:
-                c.execute(query, values[1:])
-                conn.commit()
-                messagebox.showinfo("Éxito", f"Registro insertado exitosamente en {tabla}")
-                insertar_window.destroy()
-                read_records()
-            except sqlite3.Error as e:
-                messagebox.showerror("Error", f"Error al insertar el registro: {e}")
-        else:
-            messagebox.showwarning("Error de entrada", "Por favor, complete todos los campos")
+        values.insert(2, rut_completo)
 
-    ttk.Button(insertar_window, text="Insertar", command=submit_insertar).grid(row=len(columns), column=0, columnspan=4, pady=10)
+    if any(values):
+        columns_to_insert = ", ".join(columns)
+        placeholders = ", ".join(["?" for _ in columns])
+        query = f"INSERT INTO {tabla} ({columns_to_insert}) VALUES ({placeholders})"
+        try:
+            c.execute(query, values)
+            conn.commit()
+            messagebox.showinfo("Success", f"Registro insertado exitosamente en {tabla}")
+            clear_entries()
+            read_records()
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error al insertar el registro: {e}")
+    else:
+        messagebox.showwarning("Input error", "Por favor, complete todos los campos")
+
+# Función para actualizar el RUT en ambas tablas
+def actualizar_rut_en_tablas(nuevo_rut, antiguo_rut):
+    # Actualizar el RUT en la tabla CLIENTE
+    query_update_clientes = "UPDATE CLIENTE SET RUT = ? WHERE RUT = ?"
+    c.execute(query_update_clientes, (nuevo_rut, antiguo_rut))
+    
+    # Actualizar el RUT en la tabla PEDIDOS
+    query_update_pedidos = "UPDATE PEDIDOS SET RUT = ? WHERE RUT = ?"
+    c.execute(query_update_pedidos, (nuevo_rut, antiguo_rut))
+    
+    conn.commit()
+
 
 # Función para actualizar registros en la tabla seleccionada
 def update_record():
     tabla = combo_tablas.get()
     id_col = columns[0]
-    record_id = tree.item(tree.focus())['values'][0]  # Obtener el ID del registro seleccionado
+    record_id = form_entries[id_col].get()
 
     if not record_id:
-        messagebox.showwarning("Error de entrada", f"Por favor, seleccione un registro para actualizar")
+        messagebox.showwarning("Input error", f"Por favor, ingrese el ID del registro en {id_col} para actualizar")
         return
 
-    # Leer los valores actuales en el formulario
-    current_values = [entry.get() for entry in form_entries.values()]
+    # Leer los valores actuales en el formulario en el orden correcto
+    current_values = []
+    for col in columns:
+        if col in form_entries:
+            current_values.append(form_entries[col].get())
+        else:
+            current_values.append(None)
 
     # Leer los valores originales del registro seleccionado
     c.execute(f"SELECT * FROM {tabla} WHERE {id_col} = ?", (record_id,))
@@ -324,111 +274,71 @@ def update_record():
     if original_values:
         original_values = list(original_values[1:])
 
-    # Convertir los valores de "Sí" y "No" a 1 y 0 respectivamente para la comparación
-    if tabla == 'FABRICACION' and "Aprobado" in form_entries:
-        if form_entries["Aprobado"].get() == "Sí":
-            current_values[columns.index('Aprobado') - 1] = '1'
-        elif form_entries["Aprobado"].get() == "No":
-            current_values[columns.index('Aprobado') - 1] = '0'
-
     # Verificar si se ha realizado algún cambio
     if current_values == original_values:
-        messagebox.showwarning("Sin cambios", "No estás actualizando nada")
+        messagebox.showwarning("No changes", "No estás actualizando nada")
         return
 
     # Continuar con la actualización si hay cambios
-    if tabla in ('CLIENTE', 'PEDIDOS', 'FABRICACION'):
-        if tabla in ('CLIENTE', 'PEDIDOS'):
-            numero_rut = entry_numero_rut.get()
-            dv = entry_dv.get()
-            rut_completo = obtener_rut_completo(numero_rut, dv)
+    if tabla == 'FABRICACION':
+        # Manejar "Sí" y "No" para el campo "Aprobado"
+        aprobado_val = form_entries["Aprobado"].get()
+        if aprobado_val not in ["Sí", "No"]:
+            messagebox.showwarning("Input error", "El valor de 'Aprobado' debe ser 'Sí' o 'No'")
+            return
+        current_values[columns.index("Aprobado")] = aprobado_val
 
-            if not validar_rut(rut_completo):
-                messagebox.showwarning("Error", "El RUT no es válido")
-                return
+    if tabla == 'CLIENTE' or tabla == 'PEDIDOS':
+        numero_rut = entry_numero_rut.get()
+        dv = entry_dv.get()
+        rut_completo = obtener_rut_completo(numero_rut, dv)
 
-            if tabla == 'CLIENTE':
-                # Remplazar el valor del RUT en la posición correcta
-                current_values.insert(columns.index('RUT') - 1, rut_completo)
-            elif tabla == 'PEDIDOS':
-                # Remplazar el valor del RUT en la posición correcta
-                current_values.insert(columns.index('RUT') - 1, rut_completo)
+        if not validar_rut(rut_completo):
+            messagebox.showwarning("Error", "El RUT no es válido")
+            return
 
-    # Incluir el ID en los valores actuales
-    current_values.insert(0, record_id)
+        if tabla == 'CLIENTE':
+            current_values[columns.index("RUT")] = rut_completo  # Insertar el RUT completo en la posición correcta
+            antiguo_rut = original_values[columns.index("RUT") - 1]  # Obtener el antiguo RUT
 
+        elif tabla == 'PEDIDOS':
+            current_values[columns.index("RUT")] = rut_completo
+            antiguo_rut = original_values[columns.index("RUT") - 1]  # Obtener el antiguo RUT
+
+        # Actualizar el RUT en las tablas CLIENTES y PEDIDOS si ha cambiado
+        if antiguo_rut != rut_completo:
+            actualizar_rut_en_tablas(rut_completo, antiguo_rut)
+
+    # Asegúrate de que los valores de `current_values` están en el orden correcto
     if any(current_values[1:]):
         updates = ", ".join(f"{col} = COALESCE(?, {col})" for col in columns[1:])
         query = f"UPDATE {tabla} SET {updates} WHERE {id_col} = ?"
         try:
             c.execute(query, current_values[1:] + [record_id])
             conn.commit()
-            messagebox.showinfo("Éxito", f"Registro actualizado exitosamente en {tabla}")
+            messagebox.showinfo("Success", f"Registro actualizado exitosamente en {tabla}")
             clear_entries()
             read_records()
         except sqlite3.Error as e:
             messagebox.showerror("Error", f"Error al actualizar el registro: {e}")
     else:
-        messagebox.showwarning("Error de entrada", "Por favor, ingrese al menos un dato para actualizar")
-
+        messagebox.showwarning("Input error", "Por favor, ingrese al menos un dato para actualizar")
 
 # Función para eliminar registros en la tabla seleccionada
 def delete_record():
     tabla = combo_tablas.get()
     id_col = columns[0]
-    record_id = tree.item(tree.focus())['values'][0]  # Obtener el ID del registro seleccionado
+    record_id = form_entries[id_col].get()
 
     if not record_id:
-        messagebox.showwarning("Error de entrada", f"Por favor, seleccione un registro para eliminar")
+        messagebox.showwarning("Input error", f"Por favor, ingrese el ID del registro en {id_col} para eliminar")
         return
 
-    if tabla == 'CLIENTE':
-        # Obtener el RUT del cliente a eliminar
-        rut_cliente = tree.item(tree.focus())['values'][columns.index('RUT')]
-
-        # Borrar los pedidos asociados con el RUT del cliente y sus datos relacionados
-        try:
-            c.execute("SELECT ID_Pedido FROM PEDIDOS WHERE RUT = ?", (rut_cliente,))
-            pedidos = c.fetchall()
-
-            for pedido in pedidos:
-                id_pedido = pedido[0]
-                c.execute("DELETE FROM FABRICACION WHERE ID_Pedido = ?", (id_pedido,))
-                c.execute("DELETE FROM PEDIDOSANTIAGO WHERE ID_Pedido = ?", (id_pedido,))
-                c.execute("DELETE FROM PEDIDOSTARKEN WHERE ID_Pedido = ?", (id_pedido,))
-            
-            c.execute("DELETE FROM PEDIDOS WHERE RUT = ?", (rut_cliente,))
-            conn.commit()
-        except sqlite3.Error as e:
-            messagebox.showerror("Error", f"Error al eliminar los pedidos asociados: {e}")
-            return
-
-    elif tabla == 'PEDIDOS':
-        # Obtener el ID del pedido a eliminar
-        id_pedido = tree.item(tree.focus())['values'][columns.index('ID_Pedido')]
-
-        # Borrar los registros asociados en FABRICACION, PEDIDOSANTIAGO y PEDIDOSTARKEN
-        try:
-            c.execute("DELETE FROM FABRICACION WHERE ID_Pedido = ?", (id_pedido,))
-            c.execute("DELETE FROM PEDIDOSANTIAGO WHERE ID_Pedido = ?", (id_pedido,))
-            c.execute("DELETE FROM PEDIDOSTARKEN WHERE ID_Pedido = ?", (id_pedido,))
-            conn.commit()
-        except sqlite3.Error as e:
-            messagebox.showerror("Error", f"Error al eliminar los registros asociados: {e}")
-            return
-
-    try:
-        c.execute(f"DELETE FROM {tabla} WHERE {id_col} = ?", (record_id,))
-        conn.commit()
-        messagebox.showinfo("Éxito", f"Registro eliminado exitosamente en {tabla}")
-        clear_entries()
-        read_records()
-    except sqlite3.Error as e:
-        messagebox.showerror("Error", f"Error al eliminar el registro: {e}")
-
-
-
-
+    c.execute(f"DELETE FROM {tabla} WHERE {id_col} = ?", (record_id,))
+    conn.commit()
+    messagebox.showinfo("Success", f"Registro eliminado exitosamente en {tabla}")
+    clear_entries()
+    read_records()
 
 # Función para limpiar las entradas del formulario
 def clear_entries():
@@ -446,6 +356,7 @@ def read_records():
     c.execute(query)
     all_records = c.fetchall()
     display_records(all_records)
+
 
 # Función para mostrar registros en el Treeview
 def display_records(records):
@@ -471,10 +382,8 @@ def on_tree_select(event):
                 form_entries[col].set("Sí")
             else:
                 form_entries[col].set("No")
-        elif col == "Estado" and tabla in ('FABRICACION', 'PEDIDOSANTIAGO', 'PEDIDOSTARKEN'):
+        elif col == "Estado" and tabla == 'FABRICACION':
             form_entries[col].set(val)
-        elif col not in form_entries:
-            continue  # No actualizar el campo de ID en el formulario
         else:
             form_entries[col].delete(0, tk.END)
             form_entries[col].insert(0, val)
@@ -491,7 +400,7 @@ def filter_records():
         filtered_records = c.fetchall()
         display_records(filtered_records)
     else:
-        messagebox.showwarning("Error de entrada", "Por favor, seleccione un campo y escriba un término de búsqueda")
+        messagebox.showwarning("Input error", "Por favor, seleccione un campo y escriba un término de búsqueda")
 
 # Función para ordenar las columnas al presionarlas con click
 def sort_column(tree, col, reverse):
@@ -517,10 +426,10 @@ def ventana_pedido(rut):
             valores_pedido.append(rut_completo)
             c.execute("INSERT INTO PEDIDOS (Total, Pago, Tipo_Despacho, Especificación, Fecha, RUT) VALUES (?, ?, ?, ?, ?, ?)", valores_pedido)
             conn.commit()
-            messagebox.showinfo("Éxito", "Pedido insertado exitosamente")
+            messagebox.showinfo("Success", "Pedido insertado exitosamente")
             pedido_window.destroy()
         else:
-            messagebox.showwarning("Error de entrada", "Por favor, complete todos los campos del pedido")
+            messagebox.showwarning("Input error", "Por favor, complete todos los campos del pedido")
 
     pedido_window = tk.Toplevel()
     pedido_window.title("Agregar Pedido")
@@ -529,9 +438,7 @@ def ventana_pedido(rut):
     pedido_entries = {}
     for i, col in enumerate(pedido_columns):
         ttk.Label(pedido_window, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
-        if col == "Pago":
-            entry = ttk.Combobox(pedido_window, values=["Efectivo", "Tarjeta", "Transferencia"])
-        elif col == "Tipo_Despacho":
+        if col == "Tipo_Despacho":
             entry = ttk.Combobox(pedido_window, values=["Domicilio", "Sucursal"])
         else:
             entry = ttk.Entry(pedido_window)
@@ -549,94 +456,308 @@ def ventana_pedido(rut):
 
     ttk.Button(pedido_window, text="Agregar Pedido", command=agregar_pedido).grid(row=len(pedido_columns)+1, column=0, columnspan=4, padx=5, pady=5)
 
-def mostrar_inventario():
-    inventario_window = tk.Toplevel(root)
-    inventario_window.title("Inventario")
+# Función para generar el PDF de nombres únicos de productos
+def generar_pdf_productos_unicos(productos_unicos):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(200, 10, txt="Lista de Productos Únicos", ln=True, align='C')
+
+    # Filas de productos únicos
+    for producto in productos_unicos:
+        pdf.cell(200, 10, txt=producto, ln=True, align='L')
+
+    pdf.output("productos_unicos.pdf")
+    messagebox.showinfo("Success", "PDF generado exitosamente")
+
+# Función para generar el PDF de la tabla PRODUCTOS y mostrar la ventana emergente
+def generar_pdf_productos():
+    query = "SELECT * FROM PRODUCTOS"
+    c.execute(query)
+    productos = c.fetchall()
+
+    # Extraer nombres únicos de productos
+    nombres_productos = {producto[1] for producto in productos}  # Asumiendo que el nombre del producto está en la columna 1
+
+    # Crear ventana emergente con los nombres únicos y un botón para descargar el PDF
+    ventana_productos = tk.Toplevel()
+    ventana_productos.title("Productos Únicos")
+
+    texto_productos = "\n".join(nombres_productos)
+    label_productos = tk.Label(ventana_productos, text=texto_productos, justify=tk.LEFT)
+    label_productos.pack(padx=10, pady=10)
 
     def descargar_pdf():
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
+        generar_pdf_productos_unicos(nombres_productos)
+
+    boton_descargar = tk.Button(ventana_productos, text="Descargar PDF", command=descargar_pdf)
+    boton_descargar.pack(pady=10)
+
+
+
+
+def mostrar_info_cliente(rut):
+    query = "SELECT * FROM CLIENTE WHERE RUT = ?"
+    c.execute(query, (rut,))
+    cliente = c.fetchone()
+
+    if cliente:
+        ventana_cliente = tk.Toplevel()
+        ventana_cliente.title("Información del Cliente")
+
+        info = f"ID Cliente: {cliente[0]}\nNombre: {cliente[1]}\nApellido: {cliente[2]}\nRUT: {cliente[3]}\nDirección: {cliente[4]}\nComuna: {cliente[5]}\nTeléfono: {cliente[6]}\nCorreo: {cliente[7]}"
         
-        pdf.cell(200, 10, txt="Inventario", ln=True, align='C')
+        def copiar_info():
+            pyperclip.copy(info)
+            messagebox.showinfo("Copiado", "Información del cliente copiada al portapapeles")
 
-        for row in records:
-            pdf.cell(200, 10, txt=f"Detalles: {row[0]}, Cantidad: {row[1]}", ln=True, align='L')
+        # Botón de copiar en la esquina superior izquierda
+        boton_copiar = tk.Button(ventana_cliente, text="Copiar", command=copiar_info)
+        boton_copiar.pack(anchor='nw', padx=5, pady=5)
 
-        pdf.output("inventario.pdf")
-        messagebox.showinfo("Éxito", "Inventario descargado como PDF")
+        label_info = tk.Label(ventana_cliente, text=info, justify=tk.LEFT)
+        label_info.pack(padx=10, pady=10)
+    else:
+        messagebox.showerror("Error", "Cliente no encontrado")
 
-    columns = ("Detalles", "Cantidad")
-    tree = ttk.Treeview(inventario_window, columns=columns, show='headings')
-    tree.pack(pady=20, fill=tk.BOTH, expand=True)
+def mostrar_info_pedido_cliente(rut, id_pedido, tabla):
+    query_cliente = "SELECT * FROM CLIENTE WHERE RUT = ?"
+    c.execute(query_cliente, (rut,))
+    cliente = c.fetchone()
 
-    for col in columns:
-        tree.heading(col, text=col)
+    query_pedido = f"SELECT * FROM {tabla} WHERE ID_Pedido = ?"
+    c.execute(query_pedido, (id_pedido,))
+    pedido = c.fetchone()
 
-    query = "SELECT Detalles, SUM(Cantidad) as Cantidad FROM FABRICACION GROUP BY Detalles"
-    c.execute(query)
-    records = c.fetchall()
-    for row in records:
-        tree.insert('', tk.END, values=row)
+    if cliente and pedido:
+        ventana_info = tk.Toplevel()
+        ventana_info.title("Información del Pedido y Cliente")
 
-    ttk.Button(inventario_window, text="Descargar PDF", command=descargar_pdf).pack(pady=10)
+        info_cliente = f"ID Cliente: {cliente[0]}\nNombre: {cliente[1]}\nApellido: {cliente[2]}\nRUT: {cliente[3]}\nDirección: {cliente[4]}\nComuna: {cliente[5]}\nTeléfono: {cliente[6]}\nCorreo: {cliente[7]}"
+        info_pedido = f"ID Pedido: {pedido[0]}\nEstado: {pedido[1]}\nRUT: {pedido[2]}"
+
+        info = f"Información del Cliente:\n{info_cliente}\n\nInformación del Pedido:\n{info_pedido}"
+
+        def copiar_info():
+            pyperclip.copy(info)
+            messagebox.showinfo("Copiado", "Información del pedido y cliente copiada al portapapeles")
+
+        # Botón de copiar en la esquina superior izquierda
+        boton_copiar = tk.Button(ventana_info, text="Copiar", command=copiar_info)
+        boton_copiar.pack(anchor='nw', padx=5, pady=5)
+
+        label_info = tk.Label(ventana_info, text=info, justify=tk.LEFT)
+        label_info.pack(padx=10, pady=10)
+    else:
+        messagebox.showerror("Error", "Cliente o Pedido no encontrado")
+
+def mostrar_info_completa(id_pedido):
+    # Obtener la información del pedido
+    query_pedido = "SELECT * FROM PEDIDOS WHERE ID_Pedido = ?"
+    c.execute(query_pedido, (id_pedido,))
+    pedido = c.fetchone()
+
+    if not pedido:
+        messagebox.showerror("Error", "Pedido no encontrado")
+        return
+
+    rut = pedido[-1]  # Asumiendo que el RUT está en la última columna del pedido
+
+    # Obtener la información del cliente
+    query_cliente = "SELECT * FROM CLIENTE WHERE RUT = ?"
+    c.execute(query_cliente, (rut,))
+    cliente = c.fetchone()
+
+    if not cliente:
+        messagebox.showerror("Error", "Cliente no encontrado")
+        return
+
+    # Obtener la información de fabricación
+    query_fabricacion = "SELECT * FROM FABRICACION WHERE ID_Pedido = ?"
+    c.execute(query_fabricacion, (id_pedido,))
+    fabricacion = c.fetchone()
+
+    if not fabricacion:
+        messagebox.showerror("Error", "Fabricación no encontrada")
+        return
+
+    # Crear ventana emergente con la información completa
+    ventana_info = tk.Toplevel()
+    ventana_info.title("Información Completa")
+
+    info_pedido = f"ID Pedido: {pedido[0]}\nTotal: {pedido[1]}\nPago: {pedido[2]}\nTipo Despacho: {pedido[3]}\nEspecificación: {pedido[4]}\nFecha: {pedido[5]}\nRUT: {pedido[6]}"
+    info_cliente = f"ID Cliente: {cliente[0]}\nNombre: {cliente[1]}\nApellido: {cliente[2]}\nRUT: {cliente[3]}\nDirección: {cliente[4]}\nComuna: {cliente[5]}\nTeléfono: {cliente[6]}\nCorreo: {cliente[7]}"
+    info_fabricacion = f"ID Fabricación: {fabricacion[0]}\nDetalles: {fabricacion[1]}\nEstado: {fabricacion[2]}\nAprobado: {fabricacion[3]}\nCantidad: {fabricacion[4]}\nID Pedido: {fabricacion[5]}"
+
+    info = f"Información del Pedido:\n{info_pedido}\n\nInformación del Cliente:\n{info_cliente}\n\nInformación de Fabricación:\n{info_fabricacion}"
+
+    def copiar_info():
+        pyperclip.copy(info)
+        messagebox.showinfo("Copiado", "Información completa copiada al portapapeles")
+
+    # Botón de copiar en la esquina superior izquierda
+    boton_copiar = tk.Button(ventana_info, text="Copiar", command=copiar_info)
+    boton_copiar.pack(anchor='nw', padx=5, pady=5)
+
+    label_info = tk.Label(ventana_info, text=info, justify=tk.LEFT)
+    label_info.pack(padx=10, pady=10)
+
+def mostrar_info_completa(id_pedido):
+    # Obtener la información del pedido
+    query_pedido = "SELECT * FROM PEDIDOS WHERE ID_Pedido = ?"
+    c.execute(query_pedido, (id_pedido,))
+    pedido = c.fetchone()
+
+    if not pedido:
+        messagebox.showerror("Error", "Pedido no encontrado")
+        return
+
+    rut = pedido[-1]  # Asumiendo que el RUT está en la última columna del pedido
+
+    # Obtener la información del cliente
+    query_cliente = "SELECT * FROM CLIENTE WHERE RUT = ?"
+    c.execute(query_cliente, (rut,))
+    cliente = c.fetchone()
+
+    if not cliente:
+        messagebox.showerror("Error", "Cliente no encontrado")
+        return
+
+    # Obtener la información de fabricación
+    query_fabricacion = "SELECT * FROM FABRICACION WHERE ID_Pedido = ?"
+    c.execute(query_fabricacion, (id_pedido,))
+    fabricacion = c.fetchone()
+
+    if not fabricacion:
+        messagebox.showerror("Error", "Fabricación no encontrada")
+        return
+
+    # Crear ventana emergente con la información completa
+    ventana_info = tk.Toplevel()
+    ventana_info.title("Información Completa")
+
+    info_pedido = f"ID Pedido: {pedido[0]}\nTotal: {pedido[1]}\nPago: {pedido[2]}\nTipo Despacho: {pedido[3]}\nEspecificación: {pedido[4]}\nFecha: {pedido[5]}\nRUT: {pedido[6]}"
+    info_cliente = f"ID Cliente: {cliente[0]}\nNombre: {cliente[1]}\nApellido: {cliente[2]}\nRUT: {cliente[3]}\nDirección: {cliente[4]}\nComuna: {cliente[5]}\nTeléfono: {cliente[6]}\nCorreo: {cliente[7]}"
+    info_fabricacion = f"ID Fabricación: {fabricacion[0]}\nDetalles: {fabricacion[1]}\nEstado: {fabricacion[2]}\nAprobado: {fabricacion[3]}\nCantidad: {fabricacion[4]}\nID Pedido: {fabricacion[5]}"
+
+    info = f"Información del Pedido:\n{info_pedido}\n\nInformación del Cliente:\n{info_cliente}\n\nInformación de Fabricación:\n{info_fabricacion}"
+
+    def copiar_info():
+        pyperclip.copy(info)
+        messagebox.showinfo("Copiado", "Información completa copiada al portapapeles")
+
+    # Botón de copiar en la esquina superior izquierda
+    boton_copiar = tk.Button(ventana_info, text="Copiar", command=copiar_info)
+    boton_copiar.pack(anchor='nw', padx=5, pady=5)
+
+    label_info = tk.Label(ventana_info, text=info, justify=tk.LEFT)
+    label_info.pack(padx=10, pady=10)
+
+
+def on_tree_double_click(event):
+    item = tree.selection()[0]
+    values = tree.item(item, "values")
+    
+    tabla = combo_tablas.get()
+    if tabla == "PEDIDOSTARKEN" or tabla == "PEDIDOSANTIAGO":
+        id_pedido = values[2]  # Suponiendo que el ID_Pedido es el tercer valor en values
+        mostrar_info_completa(id_pedido)
+    elif tabla == "FABRICACION":
+        id_pedido = values[-1]  # Suponiendo que el ID_Pedido está en la última columna en la tabla FABRICACION
+        mostrar_info_completa(id_pedido)
+    elif tabla == "PEDIDOS":
+        id_pedido = values[0]  # Suponiendo que el ID del pedido es el primer valor en values
+        mostrar_info_completa(id_pedido)
+    elif tabla == "CLIENTE":
+        rut = values[3]  # Suponiendo que el RUT está en la cuarta columna en la tabla CLIENTE
+        mostrar_info_cliente_completa(rut)
+    else:
+        messagebox.showinfo("Información", "Esta funcionalidad no está implementada para esta tabla")
+
+
+# Integrar el botón en la interfaz principal
+def main_window():
+    global form_frame, tree, combo_tablas, form_entries, search_entry, search_field, all_records, entry_numero_rut, entry_dv
+
+    root = tk.Tk()
+    root.title("Casa de la Impresión")
+    root.bind('<Escape>', lambda e: root.attributes('-fullscreen', False))  # PANTALLA COMPLETA SIN BORDES
+    root.state('zoomed')
+
+    # Crear el frame para el formulario
+    form_frame = tk.Frame(root)
+    form_frame.pack(pady=20)
+
+    # Crear el combo para seleccionar la tabla
+    ttk.Label(root, text="Registro").pack()
+    combo_tablas = ttk.Combobox(root, values=['CLIENTE', 'PEDIDOS', 'FABRICACION', 'PEDIDOSANTIAGO', 'PEDIDOSTARKEN'])
+    combo_tablas.pack(padx=10, pady=10)
+    combo_tablas.bind("<<ComboboxSelected>>", lambda event: load_table(combo_tablas.get()))
+
+    # Crear el frame para el Treeview y su scrollbar
+    tree_frame = tk.Frame(root)
+    tree_frame.pack(pady=20, fill='x')
+
+    # Crear el Treeview
+    columns = ()
+    tree = ttk.Treeview(tree_frame, columns=columns, show='headings')
+    tree.pack(side='left', fill='both', expand=True)
+
+    # Crear el scrollbar
+    scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
+    scrollbar.pack(side='right', fill='y')
+
+    tree.configure(yscrollcommand=scrollbar.set)
+
+    # Asociar el evento de selección con la función on_tree_select
+    tree.bind("<<TreeviewSelect>>", on_tree_select)
+
+    # Asociar el evento de doble clic con la función on_tree_double_click
+    tree.bind("<Double-1>", on_tree_double_click)
+
+    # Crear el frame para los botones
+    button_frame = ttk.Frame(root)
+    button_frame.pack(pady=20)
+
+    ttk.Button(button_frame, text="Insertar", command=insert_record).pack(side='left', padx=10)
+    ttk.Button(button_frame, text="Actualizar", command=update_record).pack(side='left', padx=10)
+    ttk.Button(button_frame, text="Eliminar", command=delete_record).pack(side='left', padx=10)
+    ttk.Button(button_frame, text="Limpiar", command=clear_entries).pack(side='left', padx=10)
+
+    # Botón para generar PDF de productos
+    ttk.Button(button_frame, text="Productos", command=generar_pdf_productos).pack(side='left', padx=10)
+
+
+    # Crear el frame para la búsqueda
+    search_frame = tk.Frame(root)
+    search_frame.pack(pady=20)
+
+    ttk.Label(search_frame, text="Buscar por").grid(row=0, column=0, padx=5, pady=5, sticky='W')
+    search_field = ttk.Combobox(search_frame)
+    search_field.grid(row=0, column=1, padx=5, pady=5, sticky='W')
+
+    ttk.Label(search_frame, text="Buscar").grid(row=0, column=2, padx=5, pady=5, sticky='W')
+    search_entry = tk.Entry(search_frame)
+    search_entry.grid(row=0, column=3, padx=5, pady=5, sticky='W')
+
+    ttk.Button(search_frame, text="Filtrar", command=filter_records).grid(row=0, column=4, padx=10, pady=5)
+
+    root.mainloop()
 
 # Ventana de inicio de sesión
-login_window = ThemedTk(theme="breeze")
+login_window = tk.Tk()
 login_window.title("Inicio de Sesión")
-login_window.geometry("400x350")
-login_window.resizable(False, False)
-login_window.configure(bg="#f0f0f0")
 
-main_frame = tk.Frame(login_window, bg="#f0f0f0")
-main_frame.place(relwidth=1, relheight=1)
+ttk.Label(login_window, text="RUT").grid(row=0, column=0, padx=5, pady=5, sticky='W')
+entry_rut_login = ttk.Entry(login_window)
+entry_rut_login.grid(row=0, column=1, padx=5, pady=5, sticky='W')
 
-title_label = tk.Label(main_frame, text="INICIO DE SESIÓN", font=("Helvetica", 16, "bold"), bg="#f0f0f0", fg="black")
-title_label.pack(pady=20)
+ttk.Label(login_window, text="Contraseña").grid(row=1, column=0, padx=5, pady=5, sticky='W')
+entry_password = ttk.Entry(login_window, show="*")
+entry_password.grid(row=1, column=1, padx=5, pady=5, sticky='W')
 
-entry_frame = tk.Frame(main_frame, bg="white", bd=5)
-entry_frame.pack(pady=20)
-
-def on_entry_click(event, entry, placeholder, is_password=False):
-    if entry.get() == placeholder:
-        entry.delete(0, "end")  # Delete all the text in the entry
-        entry.config(foreground='black')
-        if is_password:
-            entry.config(show='*')  # Set the show character for password
-
-def on_focusout(event, entry, placeholder, is_password=False):
-    if entry.get() == '':
-        entry.insert(0, placeholder)
-        entry.config(foreground='grey')
-        if is_password:
-            entry.config(show='')  # Remove the show character for password
-
-rut_placeholder = "Ingrese su RUT"
-entry_rut_login = ttk.Entry(entry_frame, font=("Helvetica", 12), foreground='grey')
-entry_rut_login.insert(0, rut_placeholder)
-entry_rut_login.bind('<FocusIn>', lambda event: on_entry_click(event, entry_rut_login, rut_placeholder))
-entry_rut_login.bind('<FocusOut>', lambda event: on_focusout(event, entry_rut_login, rut_placeholder))
-entry_rut_login.grid(row=0, column=1, padx=10, pady=10)
-
-password_placeholder = "Ingrese su contraseña"
-entry_password = ttk.Entry(entry_frame, font=("Helvetica", 12), foreground='grey')
-entry_password.insert(0, password_placeholder)
-entry_password.bind('<FocusIn>', lambda event: on_entry_click(event, entry_password, password_placeholder, True))
-entry_password.bind('<FocusOut>', lambda event: on_focusout(event, entry_password, password_placeholder, True))
-entry_password.grid(row=1, column=1, padx=10, pady=10)
-
-rut_icon = tk.Label(entry_frame, text="👤", font=("Helvetica", 14), bg="white")
-rut_icon.grid(row=0, column=0, padx=10)
-
-password_icon = tk.Label(entry_frame, text="🔒", font=("Helvetica", 14), bg="white")
-password_icon.grid(row=1, column=0, padx=10)
-
-login_button = ttk.Button(main_frame, text="INICIAR SESIÓN", command=autenticar_usuario, style="TButton")
-login_button.pack(pady=20)
-
-style = ttk.Style()
-style.configure("TButton", font=("Helvetica", 12, "bold"), background="#d3d3d3", foreground="black", borderwidth=1)
-style.map("TButton", background=[('active', '#a9a9a9')], foreground=[('active', 'black')])
+ttk.Button(login_window, text="Iniciar Sesión", command=autenticar_usuario).grid(row=2, column=0, columnspan=2, padx=5, pady=5)
 
 login_window.mainloop()
 conn.close()
