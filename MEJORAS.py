@@ -13,12 +13,8 @@ c = conn.cursor()
 
 # Función para validar el RUT
 def validar_rut(rut):
-    pattern = re.compile(r'^\d{7,8}-[0-9kK]$')
+    pattern = re.compile(r'^\d{7,8}$')
     return pattern.match(rut) is not None
-
-# Función para concatenar RUT
-def obtener_rut_completo(numero, dv):
-    return f"{numero}-{dv}"
 
 # Función para insertar un nuevo usuario
 def insertar_usuario(rut, contraseña):
@@ -53,80 +49,48 @@ def autenticar_usuario():
 
 # Función para cargar la tabla seleccionada
 def load_table(tabla):
-    global columns, form_entries, entry_numero_rut, entry_dv, estado_combobox, aprobado_combobox
+    global columns, form_entries, entry_numero_rut, estado_combobox, aprobado_combobox
 
     for widget in form_frame.winfo_children():
         widget.destroy()
 
     form_entries = {}
-    
+
     if tabla == 'CLIENTE':
         columns = ["ID_Cliente", "Nombre", "Apellido", "RUT", "Dirección", "Comuna", "Teléfono", "Correo"]
         
-        # Añadir campos para número RUT y dígito verificador solo si la tabla es Cliente
-        ttk.Label(form_frame, text="RUT").grid(row=3, column=0, padx=5, pady=5, sticky='W')
-        entry_numero_rut = ttk.Entry(form_frame)
-        entry_numero_rut.grid(row=3, column=1, padx=5, pady=5, sticky='W')
-
-        ttk.Label(form_frame, text="-").grid(row=3, column=2, padx=5, pady=5, sticky='W')
-        entry_dv = ttk.Entry(form_frame, width=5)
-        entry_dv.grid(row=3, column=3, padx=5, pady=5, sticky='W')
-        
-        # Crear las entradas para cada columna excepto ID_Cliente
+        # Crear las entradas para cada columna
         for i, col in enumerate(columns):
-            if col == "ID_Cliente":
-                entry = ttk.Entry(form_frame, state='W')
-            elif col == "RUT":
-                continue  # No agregar campo de RUT directamente en el formulario
-            else:
-                entry = ttk.Entry(form_frame)
-            
             ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
+            entry = ttk.Entry(form_frame)
             entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
             form_entries[col] = entry
 
-    elif tabla == 'PEDIDOS':
+    elif tabla in ['PEDIDOS', 'PEDIDOSTARKEN', 'PEDIDOSANTIAGO']:
         columns = ["ID_Pedido", "Total", "Pago", "Tipo_Despacho", "Especificación", "Fecha", "RUT"]
 
-        # Añadir campos para número RUT y dígito verificador
-        ttk.Label(form_frame, text="RUT").grid(row=6, column=0, padx=5, pady=5, sticky='W')
-        entry_numero_rut = ttk.Entry(form_frame)
-        entry_numero_rut.grid(row=6, column=1, padx=5, pady=5, sticky='W')
-
-        ttk.Label(form_frame, text="-").grid(row=6, column=2, padx=5, pady=5, sticky='W')
-        entry_dv = ttk.Entry(form_frame, width=5)
-        entry_dv.grid(row=6, column=3, padx=5, pady=5, sticky='W')
-        
-        # Crear las entradas para cada columna excepto ID_Pedido
+        # Crear las entradas para cada columna
         for i, col in enumerate(columns):
-            if col == "ID_Pedido":
-                entry = ttk.Entry(form_frame, state='W')
-            elif col == "RUT":
-                continue  # No agregar campo de RUT directamente en el formulario
-            elif col == "Tipo_Despacho":
+            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
+            if col == "Tipo_Despacho":
                 entry = ttk.Combobox(form_frame, values=["Domicilio", "Sucursal"])
             else:
                 entry = ttk.Entry(form_frame)
-            
-            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
             entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
             form_entries[col] = entry
 
     elif tabla == 'FABRICACION':
         columns = ["ID_Fabricacion", "Detalles", "Estado", "Aprobado", "Cantidad", "ID_Pedido"]
         
-        # Crear las entradas para cada columna excepto ID_Fabricacion
+        # Crear las entradas para cada columna
         for i, col in enumerate(columns):
-            if col == "ID_Fabricacion":
-                entry = ttk.Entry(form_frame, state='W')
-            elif col == "Estado":
+            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
+            if col == "Estado":
                 entry = ttk.Combobox(form_frame, values=["Empaquetado", "No Empaquetado"])
             elif col == "Aprobado":
                 entry = ttk.Combobox(form_frame, values=["Sí", "No"])
             else:
                 entry = ttk.Entry(form_frame)
-            
-            ttk.Label(form_frame, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
             entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
             form_entries[col] = entry
 
@@ -138,11 +102,18 @@ def load_table(tabla):
     search_field['values'] = columns  # Actualizar el Combobox de búsqueda
     read_records()
 
-
     
 # Función para insertar un nuevo cliente y mostrar la ventana de pedido
 def insertar_cliente():
     cliente_values = [form_entries[col].get() for col in columns if col != "ID_Cliente"]
+
+    numero_rut = entry_numero_rut.get()
+
+    if not validar_rut(numero_rut):
+        messagebox.showwarning("Error", "El RUT no es válido")
+        return
+
+    cliente_values.insert(3, numero_rut)
 
     if all(cliente_values):
         query = f"INSERT INTO CLIENTE (Nombre, Apellido, RUT, Dirección, Comuna, Teléfono, Correo) VALUES (?, ?, ?, ?, ?, ?, ?)"
@@ -152,39 +123,11 @@ def insertar_cliente():
             messagebox.showinfo("Success", "Cliente insertado exitosamente")
             clear_entries()
             read_records()
-            ventana_pedido(cliente_values[2])  # El RUT es el tercer valor en cliente_values
+            ventana_pedido(numero_rut)
         except sqlite3.Error as e:
             messagebox.showerror("Error", f"Error al insertar el cliente: {e}")
     else:
         messagebox.showwarning("Input error", "Por favor, complete todos los campos")
-
-# Función para mostrar la ventana de pedido
-def ventana_pedido(rut):
-    def agregar_pedido():
-        valores_pedido = [entry.get() for entry in pedido_entries.values()]
-        if all(valores_pedido):
-            valores_pedido.append(rut)  # Añadir el RUT al final de los valores del pedido
-            c.execute("INSERT INTO PEDIDOS (Total, Pago, Tipo_Despacho, Especificación, Fecha, RUT) VALUES (?, ?, ?, ?, ?, ?)", valores_pedido)
-            conn.commit()
-            messagebox.showinfo("Success", "Pedido insertado exitosamente")
-            pedido_window.destroy()
-        else:
-            messagebox.showwarning("Input error", "Por favor, complete todos los campos del pedido")
-
-    pedido_window = tk.Toplevel()
-    pedido_window.title("Agregar Pedido")
-
-    pedido_columns = ("Total", "Pago", "Tipo_Despacho", "Especificación", "Fecha")
-    pedido_entries = {}
-    for i, col in enumerate(pedido_columns):
-        ttk.Label(pedido_window, text=col).grid(row=i, column=0, padx=5, pady=5, sticky='W')
-        if col == "Tipo_Despacho":
-            entry = ttk.Combobox(pedido_window, values=["Domicilio", "Sucursal"])
-        else:
-            entry = ttk.Entry(pedido_window)
-        entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
-        pedido_entries[col] = entry
-
 
     # Añadir el campo RUT sin permitir su edición
     ttk.Label(pedido_window, text="RUT").grid(row=len(pedido_columns), column=0, padx=5, pady=5, sticky='W')
@@ -201,7 +144,6 @@ def insert_record():
     values = [entry.get() for entry in form_entries.values()]
 
     if tabla == 'FABRICACION':
-        # Asegurarse de que los valores "Sí" y "No" se manejen como texto
         if "Aprobado" in form_entries:
             aprobado_val = form_entries["Aprobado"].get()
             if aprobado_val not in ["Sí", "No"]:
@@ -211,14 +153,12 @@ def insert_record():
     
     if tabla == 'CLIENTE':
         numero_rut = entry_numero_rut.get()
-        dv = entry_dv.get()
-        rut_completo = obtener_rut_completo(numero_rut, dv)
 
-        if not validar_rut(rut_completo):
+        if not validar_rut(numero_rut):
             messagebox.showwarning("Error", "El RUT no es válido")
             return
 
-        values.insert(2, rut_completo)
+        values.insert(3, numero_rut)
 
     if any(values):
         columns_to_insert = ", ".join(columns)
@@ -288,26 +228,19 @@ def update_record():
             return
         current_values[columns.index("Aprobado")] = aprobado_val
 
-    if tabla == 'CLIENTE' or tabla == 'PEDIDOS':
-        numero_rut = entry_numero_rut.get()
-        dv = entry_dv.get()
-        rut_completo = obtener_rut_completo(numero_rut, dv)
+    if tabla in ['CLIENTE', 'PEDIDOS', 'PEDIDOSTARKEN', 'PEDIDOSANTIAGO']:
+        numero_rut = form_entries["RUT"].get()
 
-        if not validar_rut(rut_completo):
+        if not validar_rut(numero_rut):
             messagebox.showwarning("Error", "El RUT no es válido")
             return
 
-        if tabla == 'CLIENTE':
-            current_values[columns.index("RUT")] = rut_completo  # Insertar el RUT completo en la posición correcta
-            antiguo_rut = original_values[columns.index("RUT") - 1]  # Obtener el antiguo RUT
+        current_values[columns.index("RUT")] = numero_rut  # Insertar el RUT en la posición correcta
+        antiguo_rut = original_values[columns.index("RUT")]  # Obtener el antiguo RUT
 
-        elif tabla == 'PEDIDOS':
-            current_values[columns.index("RUT")] = rut_completo
-            antiguo_rut = original_values[columns.index("RUT") - 1]  # Obtener el antiguo RUT
-
-        # Actualizar el RUT en las tablas CLIENTES y PEDIDOS si ha cambiado
-        if antiguo_rut != rut_completo:
-            actualizar_rut_en_tablas(rut_completo, antiguo_rut)
+        # Actualizar el RUT en las tablas CLIENTE y PEDIDOS si ha cambiado
+        if antiguo_rut != numero_rut:
+            actualizar_rut_en_tablas(numero_rut, antiguo_rut)
 
     # Asegúrate de que los valores de `current_values` están en el orden correcto
     if any(current_values[1:]):
@@ -365,28 +298,19 @@ def display_records(records):
     for row in records:
         tree.insert('', tk.END, values=row)
 
-# Función para mostrar los registros en los cuadros
+# Función para mostrar registros en los cuadros
 def on_tree_select(event):
     selected_item = tree.focus()
     values = tree.item(selected_item, 'values')
     tabla = combo_tablas.get()
     for col, val in zip(columns, values):
-        if col == "RUT" and tabla in ('CLIENTE', 'PEDIDOS'):
-            numero, dv = val.split('-')
-            entry_numero_rut.delete(0, tk.END)
-            entry_numero_rut.insert(0, numero)
-            entry_dv.delete(0, tk.END)
-            entry_dv.insert(0, dv)
-        elif col == "Aprobado" and tabla == 'FABRICACION':
-            if val == '1':
-                form_entries[col].set("Sí")
-            else:
-                form_entries[col].set("No")
-        elif col == "Estado" and tabla == 'FABRICACION':
-            form_entries[col].set(val)
-        else:
+        if col in form_entries:
             form_entries[col].delete(0, tk.END)
             form_entries[col].insert(0, val)
+        elif col == "Aprobado" and tabla == 'FABRICACION':
+            form_entries[col].set("Sí" if val == '1' else "No")
+        elif col == "Estado" and tabla == 'FABRICACION':
+            form_entries[col].set(val)
 
 # Función para filtrar registros en el Treeview
 def filter_records():
@@ -415,15 +339,11 @@ def ventana_pedido(rut):
     def agregar_pedido():
         valores_pedido = [entry.get() for entry in pedido_entries.values()]
         if all(valores_pedido):
-            numero_rut = entry_numero_rut.get()
-            dv = entry_dv.get()
-            rut_completo = obtener_rut_completo(numero_rut, dv)
-
-            if not validar_rut(rut_completo):
+            if not validar_rut(rut):
                 messagebox.showwarning("Error", "El RUT no es válido")
                 return
 
-            valores_pedido.append(rut_completo)
+            valores_pedido.append(rut)
             c.execute("INSERT INTO PEDIDOS (Total, Pago, Tipo_Despacho, Especificación, Fecha, RUT) VALUES (?, ?, ?, ?, ?, ?)", valores_pedido)
             conn.commit()
             messagebox.showinfo("Success", "Pedido insertado exitosamente")
@@ -445,16 +365,14 @@ def ventana_pedido(rut):
         entry.grid(row=i, column=1, padx=5, pady=5, sticky='W')
         pedido_entries[col] = entry
 
-    # Añadir campos para número RUT y dígito verificador
-    ttk.Label(pedido_window, text="Número RUT").grid(row=len(pedido_columns), column=0, padx=5, pady=5, sticky='W')
-    entry_numero_rut = ttk.Entry(pedido_window)
-    entry_numero_rut.grid(row=len(pedido_columns), column=1, padx=5, pady=5, sticky='W')
+    # Añadir el campo RUT sin permitir su edición
+    ttk.Label(pedido_window, text="RUT").grid(row=len(pedido_columns), column=0, padx=5, pady=5, sticky='W')
+    entry_rut = ttk.Entry(pedido_window)
+    entry_rut.grid(row=len(pedido_columns), column=1, padx=5, pady=5, sticky='W')
+    entry_rut.insert(0, rut)
+    entry_rut.config(state='disabled')
 
-    ttk.Label(pedido_window, text="Dígito Verificador").grid(row=len(pedido_columns), column=2, padx=5, pady=5, sticky='W')
-    entry_dv = ttk.Entry(pedido_window, width=5)
-    entry_dv.grid(row=len(pedido_columns), column=3, padx=5, pady=5, sticky='W')
-
-    ttk.Button(pedido_window, text="Agregar Pedido", command=agregar_pedido).grid(row=len(pedido_columns)+1, column=0, columnspan=4, padx=5, pady=5)
+    ttk.Button(pedido_window, text="Agregar Pedido", command=agregar_pedido).grid(row=len(pedido_columns)+1, column=0, columnspan=2, padx=5, pady=5)
 
 # Función para generar el PDF de nombres únicos de productos
 def generar_pdf_productos_unicos(productos_unicos):
